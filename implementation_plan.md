@@ -12,10 +12,10 @@ Build a Unified AI Assistant for Navigating Fragmented NVIDIA Documentation, Exa
 ## Phases
 
 ### Phase 1: Project Initialization & Scaffolding
-- [ ] Create project directory structure
-- [ ] Initialize Frontend (Next.js)
-- [ ] Initialize Backend (FastAPI)
-- [ ] Set up basic configuration (env vars, gitignore)
+- [x] Create project directory structure
+- [x] Initialize Frontend (Next.js)
+- [x] Initialize Backend (FastAPI)
+- [x] Set up basic configuration (env vars, gitignore)
 
 ### Phase 2: Backend Core (RAG & Agent)
 - [ ] Implement Data Ingestion (Crawler/Scraper for NVIDIA docs)
