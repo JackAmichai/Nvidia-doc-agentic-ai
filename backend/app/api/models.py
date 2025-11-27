@@ -8,8 +8,9 @@ from typing import List, Optional, Dict
 
 class QueryRequest(BaseModel):
     """Request model for queries."""
-    query: str = Field(..., description="User's question")
+    query: str = Field(..., description="User's question", min_length=1)
     n_results: int = Field(5, description="Number of results to retrieve", ge=1, le=20)
+    include_code_examples: bool = Field(True, description="Whether to include code examples from GitHub")
 
 
 class Source(BaseModel):
@@ -19,6 +20,15 @@ class Source(BaseModel):
     relevance: float = Field(..., ge=0.0, le=1.0)
 
 
+class CodeExample(BaseModel):
+    """Code example from GitHub."""
+    name: str
+    path: str
+    repo: str
+    url: str
+    description: str
+
+
 class QueryResponse(BaseModel):
     """Response model for queries."""
     query: str
@@ -26,6 +36,7 @@ class QueryResponse(BaseModel):
     query_type: str
     confidence: float
     sources: List[Source]
+    code_examples: List[CodeExample] = []
     matched_keywords: List[str]
     suggested_tags: List[str]
 
@@ -56,7 +67,18 @@ class StatsResponse(BaseModel):
     collection_name: str
 
 
+class CacheStatsResponse(BaseModel):
+    """Cache statistics response."""
+    enabled: bool
+    total_entries: int
+    active_entries: int
+    expired_entries: int
+    ttl_seconds: int
+
+
 class HealthResponse(BaseModel):
     """Health check response."""
     status: str
     message: str
+    version: Optional[str] = None
+    documents_count: Optional[int] = None

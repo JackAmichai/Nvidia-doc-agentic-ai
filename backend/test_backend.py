@@ -3,7 +3,11 @@ Simple test script to verify backend components work.
 """
 
 import sys
-sys.path.insert(0, '/Users/jackamichai/Documents/antigravity projects/backend')
+import os
+
+# Add the backend directory to the path
+backend_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, backend_dir)
 
 from app.services.query_router import QueryRouter, QueryType
 

@@ -6,6 +6,11 @@ Main agent that orchestrates RAG retrieval and answer generation.
 from typing import List, Dict, Optional
 from app.services.vector_store import VectorStoreService
 from app.services.query_router import QueryRouter, QueryType
+from app.services.cache import cache_service
+from app.services.github_search import github_service
+from app.core.logger import setup_logger
+
+logger = setup_logger(__name__, "rag_agent.log")
 
 
 class RAGAgent:
@@ -34,53 +39,97 @@ Never hallucinate unreleased hardware, internal systems, or private APIs."""
         # For MVP, we'll use a mock LLM response
         # In production, this would use OpenAI/Anthropic API
     
-    def query(self, user_query: str, n_results: int = 5) -> Dict:
+    def query(self, user_query: str, n_results: int = 5, include_code_examples: bool = True) -> Dict:
         """
         Process a user query and return an answer.
         
         Args:
             user_query: The user's question
             n_results: Number of documents to retrieve
+            include_code_examples: Whether to search for code examples
             
         Returns:
             Dict with answer, sources, and metadata
         """
-        # Step 1: Route the query
-        routing_result = self.query_router.route_query(user_query)
-        query_type = routing_result['query_type']
-        
-        # Step 2: Retrieve relevant documents
-        retrieved_docs = self.vector_store.search(user_query, n_results=n_results)
-        
-        # Step 3: Generate answer
-        if self.use_llm:
-            answer = self._generate_llm_answer(user_query, retrieved_docs, query_type)
-        else:
-            answer = self._generate_mock_answer(user_query, retrieved_docs, query_type)
-        
-        # Step 4: Format response
-        return {
-            "query": user_query,
-            "answer": answer,
-            "query_type": query_type.value,
-            "confidence": routing_result['confidence'],
-            "sources": [
-                {
-                    "title": doc['metadata'].get('title', 'N/A'),
-                    "url": doc['metadata'].get('url', 'N/A'),
-                    "relevance": 1.0 - (doc.get('distance', 0) if doc.get('distance') else 0)
-                }
-                for doc in retrieved_docs[:3]  # Top 3 sources
-            ],
-            "matched_keywords": routing_result['matched_keywords'],
-            "suggested_tags": routing_result['suggested_tags']
-        }
+        try:
+            logger.info(f"Processing query: '{user_query[:100]}...'")
+            
+            # Check cache first
+            cache_params = {"n_results": n_results, "include_code": include_code_examples}
+            cached_result = cache_service.get(user_query, cache_params)
+            if cached_result:
+                logger.info("Returning cached result")
+                return cached_result
+            
+            # Step 1: Route the query
+            routing_result = self.query_router.route_query(user_query)
+            query_type = routing_result['query_type']
+            logger.info(f"Query routed to: {query_type.value} (confidence: {routing_result['confidence']:.2f})")
+            
+            # Step 2: Retrieve relevant documents
+            retrieved_docs = self.vector_store.search(user_query, n_results=n_results)
+            
+            # Step 3: Get code examples if requested
+            code_examples = []
+            if include_code_examples and query_type != QueryType.GENERIC:
+                code_examples = self._get_code_examples(user_query, query_type)
+            
+            # Step 4: Generate answer
+            if self.use_llm:
+                answer = self._generate_llm_answer(user_query, retrieved_docs, query_type, code_examples)
+            else:
+                answer = self._generate_mock_answer(user_query, retrieved_docs, query_type, code_examples)
+            
+            # Step 5: Format response
+            result = {
+                "query": user_query,
+                "answer": answer,
+                "query_type": query_type.value,
+                "confidence": routing_result['confidence'],
+                "sources": [
+                    {
+                        "title": doc['metadata'].get('title', 'N/A'),
+                        "url": doc['metadata'].get('url', 'N/A'),
+                        "relevance": 1.0 - (doc.get('distance', 0) if doc.get('distance') else 0)
+                    }
+                    for doc in retrieved_docs[:3]  # Top 3 sources
+                ],
+                "code_examples": code_examples,
+                "matched_keywords": routing_result['matched_keywords'],
+                "suggested_tags": routing_result['suggested_tags']
+            }
+            
+            # Cache the result
+            cache_service.set(user_query, result, cache_params)
+            
+            logger.info("Query processed successfully")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error processing query: {str(e)}")
+            raise RuntimeError(f"Query processing failed: {str(e)}")
+    
+    def _get_code_examples(self, query: str, query_type: QueryType) -> List[Dict]:
+        """Get relevant code examples from GitHub."""
+        try:
+            if query_type == QueryType.CUDA_GENERAL or query_type == QueryType.CUDA_PROFILING:
+                return github_service.search_cuda_examples(query, max_results=2)
+            elif query_type == QueryType.TENSORRT:
+                return github_service.search_tensorrt_examples(query, max_results=2)
+            elif query_type == QueryType.NEMO:
+                return github_service.search_nemo_examples(query, max_results=2)
+            else:
+                return github_service.search_code(query, max_results=2)
+        except Exception as e:
+            logger.warning(f"Failed to fetch code examples: {str(e)}")
+            return []
     
     def _generate_mock_answer(
         self, 
         query: str, 
         docs: List[Dict], 
-        query_type: QueryType
+        query_type: QueryType,
+        code_examples: List[Dict] = None
     ) -> str:
         """
         Generate a mock answer for MVP (without LLM).
@@ -108,6 +157,12 @@ Never hallucinate unreleased hardware, internal systems, or private APIs."""
         for i, doc in enumerate(docs[:2], 1):
             content_preview = doc['content'][:300] + "..." if len(doc['content']) > 300 else doc['content']
             answer_parts.append(f"{i}. {content_preview}\n")
+        
+        # Add code examples if available
+        if code_examples and len(code_examples) > 0:
+            answer_parts.append("\n**Code Examples:**\n")
+            for i, example in enumerate(code_examples, 1):
+                answer_parts.append(f"{i}. [{example['name']}]({example['url']}) - {example['repo']}\n")
         
         # Add sources section
         answer_parts.append("\n**Sources:**\n")

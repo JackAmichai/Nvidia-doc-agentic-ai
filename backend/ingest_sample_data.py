@@ -4,7 +4,11 @@ Adds sample NVIDIA documentation to the vector store for testing.
 """
 
 import sys
-sys.path.insert(0, '/Users/jackamichai/Documents/antigravity projects/backend')
+import os
+
+# Add the backend directory to the path
+backend_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, backend_dir)
 
 from app.services.vector_store import VectorStoreService
 
