@@ -5,9 +5,13 @@ Scrapes public NVIDIA documentation and prepares it for RAG ingestion.
 
 import requests
 from bs4 import BeautifulSoup
-from typing import List, Dict
+from typing import List, Dict, Optional
 import time
 from urllib.parse import urljoin, urlparse
+from app.core.logger import setup_logger
+from app.core.config import settings
+
+logger = setup_logger(__name__, "scraper.log")
 
 
 class NVIDIADocScraper:
@@ -26,15 +30,48 @@ class NVIDIADocScraper:
             "mig_guide": "https://docs.nvidia.com/datacenter/tesla/mig-user-guide/",
         }
     
-    def fetch_page(self, url: str) -> str:
-        """Fetch a single page."""
-        try:
-            response = requests.get(url, headers=self.headers, timeout=10)
-            response.raise_for_status()
-            return response.text
-        except Exception as e:
-            print(f"Error fetching {url}: {e}")
-            return ""
+    def fetch_page(self, url: str, retries: int = 3) -> Optional[str]:
+        """
+        Fetch a single page with retry logic.
+        
+        Args:
+            url: URL to fetch
+            retries: Number of retry attempts
+            
+        Returns:
+            HTML content or None if failed
+        """
+        for attempt in range(retries):
+            try:
+                logger.info(f"Fetching {url} (attempt {attempt + 1}/{retries})")
+                
+                response = requests.get(
+                    url, 
+                    headers=self.headers, 
+                    timeout=settings.SCRAPER_TIMEOUT
+                )
+                response.raise_for_status()
+                
+                logger.info(f"Successfully fetched {url}")
+                return response.text
+                
+            except requests.exceptions.Timeout:
+                logger.warning(f"Timeout fetching {url} (attempt {attempt + 1})")
+                if attempt < retries - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                    
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Error fetching {url}: {str(e)}")
+                if attempt < retries - 1:
+                    time.sleep(2 ** attempt)
+                else:
+                    return None
+                    
+            except Exception as e:
+                logger.error(f"Unexpected error fetching {url}: {str(e)}")
+                return None
+        
+        return None
     
     def extract_text_from_html(self, html: str, url: str) -> Dict[str, str]:
         """Extract meaningful text from HTML."""
@@ -78,22 +115,25 @@ class NVIDIADocScraper:
         For MVP, we'll just scrape a few pages as examples.
         """
         if source_name not in self.sources:
-            print(f"Unknown source: {source_name}")
+            logger.warning(f"Unknown source: {source_name}")
             return []
         
         base_url = self.sources[source_name]
         documents = []
         
-        print(f"Scraping {source_name} from {base_url}")
+        logger.info(f"Scraping {source_name} from {base_url}")
         
         # Fetch the main page
         html = self.fetch_page(base_url)
         if html:
             doc = self.extract_text_from_html(html, base_url)
+            doc['source'] = source_name  # Add source metadata
             documents.append(doc)
-            print(f"Scraped: {doc['title']}")
+            logger.info(f"Scraped: {doc['title']}")
+        else:
+            logger.error(f"Failed to scrape {source_name}")
         
-        time.sleep(1)  # Be respectful with rate limiting
+        time.sleep(settings.SCRAPER_RATE_LIMIT)  # Rate limiting
         
         return documents
     
