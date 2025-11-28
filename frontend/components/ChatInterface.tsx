@@ -1,9 +1,36 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, Zap, Code, Server, Cpu } from 'lucide-react';
+import { Send, Sparkles, Zap, Code, Server, Cpu, ExternalLink, AlertCircle, Loader2 } from 'lucide-react';
+
+interface Source {
+    title: string;
+    url: string;
+    relevance: number;
+}
+
+interface CodeExample {
+    name: string;
+    path: string;
+    repo: string;
+    url: string;
+    description: string;
+}
+
+interface QueryResponse {
+    query: string;
+    answer: string;
+    query_type: string;
+    confidence: number;
+    sources: Source[];
+    code_examples: CodeExample[];
+    matched_keywords: string[];
+    suggested_tags: string[];
+}
 
 interface Message {
     role: 'user' | 'assistant';
     content: string;
+    data?: QueryResponse; // Store full API response for assistant messages
+    error?: boolean;
 }
 
 export default function NvidiaDocNavigator() {
@@ -18,7 +45,7 @@ export default function NvidiaDocNavigator() {
 
     useEffect(() => {
         scrollToBottom();
-    }, [messages]);
+    }, [messages, isTyping]);
 
     const suggestedPrompts = [
         {
@@ -51,14 +78,43 @@ export default function NvidiaDocNavigator() {
         setInput('');
         setIsTyping(true);
 
-        setTimeout(() => {
+        try {
+            const response = await fetch('http://localhost:8000/api/v1/query', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    query: text,
+                    n_results: 5,
+                    include_code_examples: true
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`API Error: ${response.statusText}`);
+            }
+
+            const data: QueryResponse = await response.json();
+
             const aiMessage: Message = {
                 role: 'assistant',
-                content: `I can help you with "${text}". Here's what you need to know:\n\nFor NVIDIA GPU configuration, you'll want to check your driver version first using:\n\`\`\`bash\nnvidia-smi\n\`\`\`\n\nThen proceed with the specific configuration steps for your hardware setup.`
+                content: data.answer,
+                data: data
             };
             setMessages(prev => [...prev, aiMessage]);
+
+        } catch (error) {
+            console.error("Failed to fetch answer:", error);
+            const errorMessage: Message = {
+                role: 'assistant',
+                content: "I'm sorry, I encountered an error while connecting to the NVIDIA documentation server. Please ensure the backend is running.",
+                error: true
+            };
+            setMessages(prev => [...prev, errorMessage]);
+        } finally {
             setIsTyping(false);
-        }, 1500);
+        }
     };
 
     const handlePromptClick = (promptText: string) => {
@@ -151,18 +207,89 @@ export default function NvidiaDocNavigator() {
                                     className={`flex gap-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-4 duration-500`}
                                 >
                                     {msg.role === 'assistant' && (
-                                        <div className="w-11 h-11 bg-gradient-to-br from-green-400 to-emerald-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-green-500/30">
-                                            <Sparkles className="w-6 h-6 text-white" />
+                                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg ${msg.error ? 'bg-red-500/20 text-red-400' : 'bg-gradient-to-br from-green-400 to-emerald-600 text-white shadow-green-500/30'}`}>
+                                            {msg.error ? <AlertCircle className="w-6 h-6" /> : <Sparkles className="w-6 h-6" />}
                                         </div>
                                     )}
 
-                                    <div
-                                        className={`max-w-3xl ${msg.role === 'user'
-                                            ? 'bg-gradient-to-br from-green-600 to-emerald-600 text-white rounded-2xl rounded-tr-md px-6 py-4 shadow-xl shadow-green-500/20'
-                                            : 'bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl rounded-tl-md px-6 py-5'
-                                            }`}
-                                    >
-                                        <p className="text-sm leading-loose whitespace-pre-wrap">{msg.content}</p>
+                                    <div className="max-w-3xl space-y-4">
+                                        <div
+                                            className={`${msg.role === 'user'
+                                                ? 'bg-gradient-to-br from-green-600 to-emerald-600 text-white rounded-2xl rounded-tr-md px-6 py-4 shadow-xl shadow-green-500/20'
+                                                : 'bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl rounded-tl-md px-6 py-5'
+                                                }`}
+                                        >
+                                            <p className="text-sm leading-loose whitespace-pre-wrap">{msg.content}</p>
+                                        </div>
+
+                                        {/* Additional Data Display for Assistant */}
+                                        {msg.role === 'assistant' && msg.data && (
+                                            <div className="space-y-4 pl-2 animate-in fade-in slide-in-from-bottom-2 duration-700 delay-100">
+
+                                                {/* Tags & Confidence */}
+                                                <div className="flex flex-wrap gap-2">
+                                                    <span className="px-2 py-1 bg-white/5 rounded-md text-xs text-gray-400 border border-white/5">
+                                                        Confidence: {(msg.data.confidence * 100).toFixed(0)}%
+                                                    </span>
+                                                    <span className="px-2 py-1 bg-white/5 rounded-md text-xs text-gray-400 border border-white/5 uppercase">
+                                                        Type: {msg.data.query_type}
+                                                    </span>
+                                                    {msg.data.suggested_tags.map((tag, i) => (
+                                                        <span key={i} className="px-2 py-1 bg-green-500/10 rounded-md text-xs text-green-400 border border-green-500/20">
+                                                            #{tag}
+                                                        </span>
+                                                    ))}
+                                                </div>
+
+                                                {/* Sources */}
+                                                {msg.data.sources && msg.data.sources.length > 0 && (
+                                                    <div className="bg-black/20 rounded-xl border border-white/5 p-4">
+                                                        <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Sources</h4>
+                                                        <div className="space-y-2">
+                                                            {msg.data.sources.map((source, i) => (
+                                                                <a
+                                                                    key={i}
+                                                                    href={source.url}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="flex items-center justify-between p-2 hover:bg-white/5 rounded-lg group transition-colors"
+                                                                >
+                                                                    <div className="flex items-center gap-2 overflow-hidden">
+                                                                        <div className="w-1 h-1 bg-green-500 rounded-full"></div>
+                                                                        <span className="text-sm text-gray-300 truncate group-hover:text-green-400 transition-colors">{source.title}</span>
+                                                                    </div>
+                                                                    <ExternalLink className="w-3 h-3 text-gray-600 group-hover:text-green-400" />
+                                                                </a>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Code Examples */}
+                                                {msg.data.code_examples && msg.data.code_examples.length > 0 && (
+                                                    <div className="bg-black/20 rounded-xl border border-white/5 p-4">
+                                                        <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Code Examples</h4>
+                                                        <div className="grid gap-3">
+                                                            {msg.data.code_examples.map((example, i) => (
+                                                                <a
+                                                                    key={i}
+                                                                    href={example.url}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="block p-3 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-green-500/30 rounded-lg transition-all"
+                                                                >
+                                                                    <div className="flex items-center gap-2 mb-1">
+                                                                        <Code className="w-4 h-4 text-green-400" />
+                                                                        <span className="text-sm font-medium text-gray-200">{example.name}</span>
+                                                                    </div>
+                                                                    <div className="text-xs text-gray-500 truncate">{example.repo}</div>
+                                                                </a>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
 
                                     {msg.role === 'user' && (
@@ -176,7 +303,7 @@ export default function NvidiaDocNavigator() {
                             {isTyping && (
                                 <div className="flex gap-4 justify-start animate-in fade-in slide-in-from-bottom-4 duration-500">
                                     <div className="w-11 h-11 bg-gradient-to-br from-green-400 to-emerald-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-green-500/30">
-                                        <Sparkles className="w-6 h-6 text-white" />
+                                        <Loader2 className="w-6 h-6 text-white animate-spin" />
                                     </div>
                                     <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl rounded-tl-md px-6 py-4">
                                         <div className="flex gap-1.5">
@@ -208,10 +335,10 @@ export default function NvidiaDocNavigator() {
                         />
                         <button
                             onClick={() => handleSend()}
-                            disabled={!input.trim()}
+                            disabled={!input.trim() || isTyping}
                             className="absolute right-2 top-1/2 -translate-y-1/2 p-3.5 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl hover:from-green-600 hover:to-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-green-500/30 hover:shadow-xl hover:shadow-green-500/40 hover:scale-105 active:scale-95"
                         >
-                            <Send className="w-5 h-5 text-white" />
+                            {isTyping ? <Loader2 className="w-5 h-5 text-white animate-spin" /> : <Send className="w-5 h-5 text-white" />}
                         </button>
                     </div>
                     <p className="text-xs text-gray-500 mt-4 text-center">

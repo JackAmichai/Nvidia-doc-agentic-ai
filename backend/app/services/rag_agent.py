@@ -8,7 +8,20 @@ from app.services.vector_store import VectorStoreService
 from app.services.query_router import QueryRouter, QueryType
 from app.services.cache import cache_service
 from app.services.github_search import github_service
+from app.services.compatibility import compatibility_service
+from app.services.debugger import debugger_service
 from app.core.logger import setup_logger
+from app.core.config import settings
+
+# Import LangChain components
+try:
+    from langchain_openai import ChatOpenAI
+    from langchain_huggingface import HuggingFaceEndpoint
+    from langchain_core.prompts import PromptTemplate
+    from langchain_core.output_parsers import StrOutputParser
+    HAS_LANGCHAIN = True
+except ImportError:
+    HAS_LANGCHAIN = False
 
 logger = setup_logger(__name__, "rag_agent.log")
 
@@ -17,12 +30,20 @@ class RAGAgent:
     """Main RAG agent for answering NVIDIA documentation queries."""
     
     # System prompt for the agent
-    SYSTEM_PROMPT = """You are the NVIDIA Doc Navigator.
-You answer ONLY using public NVIDIA information.
+    SYSTEM_PROMPT = """You are the NVIDIA Doc Navigator, an expert AI assistant for NVIDIA developers.
+You answer ONLY using the provided context from public NVIDIA documentation.
 When unsure, say "I cannot verify this from public data."
-Always cite the specific docs or GitHub repo URLs.
+Always cite the specific docs or GitHub repo URLs provided in the context.
 Return step-by-step guidance, code examples, and version requirements.
-Never hallucinate unreleased hardware, internal systems, or private APIs."""
+Never hallucinate unreleased hardware, internal systems, or private APIs.
+
+Context:
+{context}
+
+Question:
+{question}
+
+Answer:"""
     
     def __init__(self, vector_store: VectorStoreService, use_llm: bool = False):
         """
@@ -35,21 +56,43 @@ Never hallucinate unreleased hardware, internal systems, or private APIs."""
         self.vector_store = vector_store
         self.query_router = QueryRouter()
         self.use_llm = use_llm
+        self.llm = None
         
-        # For MVP, we'll use a mock LLM response
-        # In production, this would use OpenAI/Anthropic API
+        if self.use_llm and HAS_LANGCHAIN:
+            # Try Hugging Face first (User Preference)
+            if settings.HUGGINGFACE_API_KEY:
+                try:
+                    self.llm = HuggingFaceEndpoint(
+                        repo_id=settings.HUGGINGFACE_REPO_ID,
+                        huggingfacehub_api_token=settings.HUGGINGFACE_API_KEY,
+                        temperature=0.2,
+                        max_new_tokens=512
+                    )
+                    logger.info(f"Hugging Face LLM initialized ({settings.HUGGINGFACE_REPO_ID})")
+                except Exception as e:
+                    logger.error(f"Failed to initialize Hugging Face LLM: {str(e)}")
+                    self.use_llm = False
+            
+            # Fallback to OpenAI if configured and HF failed or not set
+            elif settings.OPENAI_API_KEY:
+                try:
+                    self.llm = ChatOpenAI(
+                        api_key=settings.OPENAI_API_KEY,
+                        model="gpt-4-turbo-preview",
+                        temperature=0.2
+                    )
+                    logger.info("OpenAI LLM initialized")
+                except Exception as e:
+                    logger.error(f"Failed to initialize OpenAI LLM: {str(e)}")
+                    self.use_llm = False
+            
+            else:
+                logger.warning("No API keys found. Falling back to mock responses.")
+                self.use_llm = False
     
     def query(self, user_query: str, n_results: int = 5, include_code_examples: bool = True) -> Dict:
         """
         Process a user query and return an answer.
-        
-        Args:
-            user_query: The user's question
-            n_results: Number of documents to retrieve
-            include_code_examples: Whether to search for code examples
-            
-        Returns:
-            Dict with answer, sources, and metadata
         """
         try:
             logger.info(f"Processing query: '{user_query[:100]}...'")
@@ -74,13 +117,19 @@ Never hallucinate unreleased hardware, internal systems, or private APIs."""
             if include_code_examples and query_type != QueryType.GENERIC:
                 code_examples = self._get_code_examples(user_query, query_type)
             
-            # Step 4: Generate answer
-            if self.use_llm:
-                answer = self._generate_llm_answer(user_query, retrieved_docs, query_type, code_examples)
-            else:
-                answer = self._generate_mock_answer(user_query, retrieved_docs, query_type, code_examples)
+            # Step 4: Check for compatibility issues (F4)
+            compatibility_info = compatibility_service.check_compatibility(user_query)
             
-            # Step 5: Format response
+            # Step 5: Check for debug flows (F5)
+            debug_flow = debugger_service.get_debug_flow(user_query)
+            
+            # Step 6: Generate answer
+            if self.use_llm and self.llm:
+                answer = self._generate_llm_answer(user_query, retrieved_docs, query_type, compatibility_info, debug_flow)
+            else:
+                answer = self._generate_mock_answer(user_query, retrieved_docs, query_type, code_examples, compatibility_info, debug_flow)
+            
+            # Step 7: Format response
             result = {
                 "query": user_query,
                 "answer": answer,
@@ -129,11 +178,12 @@ Never hallucinate unreleased hardware, internal systems, or private APIs."""
         query: str, 
         docs: List[Dict], 
         query_type: QueryType,
-        code_examples: List[Dict] = None
+        code_examples: List[Dict] = None,
+        compatibility_info: Dict = None,
+        debug_flow: Dict = None
     ) -> str:
         """
         Generate a mock answer for MVP (without LLM).
-        In production, this would be replaced with actual LLM generation.
         """
         if not docs:
             return "I couldn't find relevant information in the NVIDIA documentation. Please try rephrasing your query or check the official NVIDIA documentation directly."
@@ -158,6 +208,24 @@ Never hallucinate unreleased hardware, internal systems, or private APIs."""
             content_preview = doc['content'][:300] + "..." if len(doc['content']) > 300 else doc['content']
             answer_parts.append(f"{i}. {content_preview}\n")
         
+        # Add Compatibility Info
+        if compatibility_info:
+            answer_parts.append("\n**Version Compatibility:**\n")
+            if compatibility_info['warnings']:
+                for warn in compatibility_info['warnings']:
+                    answer_parts.append(f"⚠️ {warn}\n")
+            if compatibility_info['info']:
+                for info in compatibility_info['info']:
+                    answer_parts.append(f"ℹ️ {info}\n")
+        
+        # Add Debug Flow
+        if debug_flow:
+            answer_parts.append(f"\n**{debug_flow['title']}:**\n")
+            for step in debug_flow['steps']:
+                answer_parts.append(f"{step['id']}. **{step['action']}**\n")
+                answer_parts.append(f"   Command: `{step['command']}`\n")
+                answer_parts.append(f"   Fix: {step['fix']}\n")
+        
         # Add code examples if available
         if code_examples and len(code_examples) > 0:
             answer_parts.append("\n**Code Examples:**\n")
@@ -177,67 +245,54 @@ Never hallucinate unreleased hardware, internal systems, or private APIs."""
         self, 
         query: str, 
         docs: List[Dict], 
-        query_type: QueryType
+        query_type: QueryType,
+        compatibility_info: Dict = None,
+        debug_flow: Dict = None
     ) -> str:
         """
-        Generate answer using LLM (OpenAI/Anthropic).
-        This is a placeholder for production implementation.
+        Generate answer using LLM (Hugging Face or OpenAI).
         """
-        # TODO: Implement actual LLM integration
-        # This would use OpenAI API or Anthropic API
-        
-        # Build context from retrieved documents
-        context = "\n\n".join([
-            f"Document {i+1} ({doc['metadata'].get('title', 'N/A')}):\n{doc['content'][:500]}"
-            for i, doc in enumerate(docs[:5])
-        ])
-        
-        # In production, this would be:
-        # response = openai.ChatCompletion.create(
-        #     model="gpt-4",
-        #     messages=[
-        #         {"role": "system", "content": self.SYSTEM_PROMPT},
-        #         {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {query}"}
-        #     ]
-        # )
-        # return response.choices[0].message.content
-        
-        return self._generate_mock_answer(query, docs, query_type)
-    
-    def get_troubleshooting_steps(self, query: str, query_type: QueryType) -> List[str]:
-        """
-        Generate troubleshooting steps for common issues.
-        """
-        troubleshooting_templates = {
-            QueryType.MIG_CONFIG: [
-                "1. Enable MIG mode: `sudo nvidia-smi -i 0 -mig 1`",
-                "2. Create MIG instances: `sudo nvidia-smi mig -cgi 19,19 -C`",
-                "3. Verify instances: `nvidia-smi -L`",
-                "4. Check device plugin configuration",
-                "5. Restart kubelet if using Kubernetes"
-            ],
-            QueryType.NVLINK: [
-                "1. Check NVLink status: `nvidia-smi nvlink --status`",
-                "2. Verify GPU topology: `nvidia-smi topo -m`",
-                "3. Check driver version compatibility",
-                "4. Verify hardware connections",
-                "5. Review system BIOS settings"
-            ],
-            QueryType.CUDA_PROFILING: [
-                "1. Use Nsight Systems for timeline profiling",
-                "2. Use Nsight Compute for kernel analysis",
-                "3. Check for memory bottlenecks",
-                "4. Analyze kernel occupancy",
-                "5. Review memory access patterns"
-            ]
-        }
-        
-        return troubleshooting_templates.get(query_type, [
-            "1. Review the official NVIDIA documentation",
-            "2. Check version compatibility",
-            "3. Verify system configuration",
-            "4. Consult NVIDIA Developer Forums"
-        ])
+        try:
+            # Build context from retrieved documents
+            context_parts = []
+            for i, doc in enumerate(docs[:5]):
+                title = doc['metadata'].get('title', 'N/A')
+                url = doc['metadata'].get('url', 'N/A')
+                content = doc['content']
+                context_parts.append(f"Source {i+1} [{title}]({url}):\n{content}\n")
+            
+            # Add compatibility info to context
+            if compatibility_info:
+                context_parts.append("\nCOMPATIBILITY ALERTS:")
+                for warn in compatibility_info.get('warnings', []):
+                    context_parts.append(f"- WARNING: {warn}")
+            
+            # Add debug flow to context
+            if debug_flow:
+                context_parts.append(f"\nDEBUGGING GUIDE ({debug_flow['title']}):")
+                for step in debug_flow['steps']:
+                    context_parts.append(f"Step {step['id']}: {step['action']} -> Run `{step['command']}`")
+            
+            context = "\n".join(context_parts)
+            
+            # Create prompt
+            prompt = PromptTemplate.from_template(self.SYSTEM_PROMPT)
+            
+            # Create chain
+            chain = prompt | self.llm | StrOutputParser()
+            
+            # Execute chain
+            response = chain.invoke({
+                "context": context,
+                "question": query
+            })
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"Error generating LLM answer: {str(e)}")
+            # Fallback to mock answer
+            return self._generate_mock_answer(query, docs, query_type, None, compatibility_info, debug_flow)
 
 
 if __name__ == "__main__":

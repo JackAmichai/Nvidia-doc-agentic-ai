@@ -20,8 +20,10 @@ router = APIRouter()
 # Initialize services (in production, use dependency injection)
 try:
     vector_store = VectorStoreService()
-    rag_agent = RAGAgent(vector_store, use_llm=False)
-    logger.info("API services initialized successfully")
+    # Enable LLM if API key is present
+    use_llm = bool(settings.OPENAI_API_KEY or settings.HUGGINGFACE_API_KEY)
+    rag_agent = RAGAgent(vector_store, use_llm=use_llm)
+    logger.info(f"API services initialized successfully (LLM enabled: {use_llm})")
 except Exception as e:
     logger.error(f"Failed to initialize API services: {str(e)}")
     raise

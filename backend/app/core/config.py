@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     # LLM API Keys (optional for MVP)
     OPENAI_API_KEY: Optional[str] = Field(default=None, description="OpenAI API key for LLM")
     ANTHROPIC_API_KEY: Optional[str] = Field(default=None, description="Anthropic API key for Claude")
+    HUGGINGFACE_API_KEY: Optional[str] = Field(default=None, description="Hugging Face API Token")
+    HUGGINGFACE_REPO_ID: str = Field(default="mistralai/Mistral-7B-Instruct-v0.2", description="Hugging Face Model ID")
     
     # Vector Store Configuration
     CHROMA_DB_PATH: str = Field(default="./chroma_db", description="Path to ChromaDB storage")

@@ -1,208 +1,183 @@
-# NVIDIA Doc Navigator - Quick Start Guide
+# 🚀 Quick Start Guide - NVIDIA Doc Navigator
 
-## 🚀 Getting Started
-
-### Prerequisites
-- Python 3.8+
+## Prerequisites
+- Python 3.10+
 - Node.js 18+
-- npm
+- A Hugging Face account (free) OR OpenAI API key
 
-### 1. Start the Backend
+---
+
+## Step 1: Get a Free Hugging Face API Token
+
+1. Visit https://huggingface.co/settings/tokens
+2. Sign up or log in
+3. Click **"New token"**
+4. Give it a name (e.g., "nvidia-doc-navigator")
+5. Select **"Read"** access
+6. Copy the token
+
+---
+
+## Step 2: Configure Backend
 
 ```bash
 cd backend
 
-# Create and activate virtual environment
+# Copy the example env file
+cp .env.example .env
+
+# Edit .env and paste your Hugging Face token
+# nano .env  # or use any text editor
+# Set: HUGGINGFACE_API_KEY=hf_xxxxxxxxxxxxx
+```
+
+---
+
+## Step 3: Install Backend Dependencies
+
+```bash
+# Create virtual environment (if not already created)
 python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Activate virtual environment
+source venv/bin/activate  # Mac/Linux
+# venv\Scripts\activate   # Windows
 
 # Install dependencies
 pip install -r requirements.txt
+```
 
-# Start the server
+---
+
+## Step 4: Ingest Sample Data
+
+```bash
+# This will scrape NVIDIA docs and populate the vector database
+python ingest_data.py
+```
+
+Expected output:
+```
+Starting NVIDIA Documentation Ingestion...
+Scraping documentation sources...
+Scraped 4 documents.
+Ingesting into Vector Store (ChromaDB)...
+Successfully ingested 4 documents!
+```
+
+---
+
+## Step 5: Start the Backend
+
+```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-The backend API will be available at: **http://localhost:8000**
-- API Documentation: http://localhost:8000/docs
-- Health Check: http://localhost:8000/api/v1/health
+You should see:
+```
+INFO:     Uvicorn running on http://0.0.0.0:8000
+```
 
-### 2. Start the Frontend
+**Keep this terminal open!**
+
+---
+
+## Step 6: Start the Frontend
+
+Open a **new terminal**:
 
 ```bash
 cd frontend
 
-# Install dependencies
+# Install dependencies (if not already installed)
 npm install
 
 # Start development server
 npm run dev
 ```
 
-The frontend will be available at: **http://localhost:3000**
-
-## 📝 Usage
-
-1. Open http://localhost:3000 in your browser
-2. Type a question about NVIDIA documentation (e.g., "How do I configure MIG on A100?")
-3. Get instant answers with sources!
-
-### Example Queries
-- "How do I configure MIG on A100?"
-- "Why is my CUDA kernel slow?"
-- "TensorRT FP16 optimization example"
-- "How to set up NVLink?"
-
-## 🔧 Configuration
-
-### Backend Environment Variables
-Create a `.env` file in the `backend/` directory:
-
-```bash
-# Optional: For LLM-powered responses
-OPENAI_API_KEY=your_openai_api_key_here
-
-# Vector Store
-CHROMA_PERSIST_DIRECTORY=./chroma_db
+You should see:
+```
+➜ Local: http://localhost:3000
 ```
 
-## 📚 Adding Documentation
+---
 
-To add NVIDIA documentation to the knowledge base:
+## Step 7: Test the Application
 
-```bash
-cd backend
-source venv/bin/activate
-python -c "from app.services.scraper import NVIDIADocScraper; from app.services.vector_store import VectorStoreService; scraper = NVIDIADocScraper(); docs = scraper.scrape_all_sources(); vs = VectorStoreService(); vs.add_documents(docs)"
-```
+1. Open your browser to **http://localhost:3000**
+2. You'll see the beautiful NVIDIA Doc Navigator interface
+3. Try a sample query:
+   - "How do I configure MIG on A100?"
+   - "Why is my CUDA kernel slow?"
+   - "TensorRT FP16 optimization guide"
 
-Or use the API endpoint:
+---
 
-```bash
-curl -X POST http://localhost:8000/api/v1/ingest \
-  -H "Content-Type: application/json" \
-  -d '{
-    "documents": [
-      {
-        "url": "https://docs.nvidia.com/cuda/",
-        "title": "CUDA Documentation",
-        "content": "Your content here..."
-      }
-    ]
-  }'
-```
+## 🎉 You're All Set!
 
-## 🧪 Testing
+The system is now:
+- ✅ Connected to Hugging Face (Free LLM)
+- ✅ Using RAG with ChromaDB
+- ✅ Routing queries intelligently
+- ✅ Providing version compatibility checks
+- ✅ Offering step-by-step debugging
 
-### Test Backend Components
-```bash
-cd backend
-source venv/bin/activate
-python test_backend.py
-```
+---
 
-### Test API Endpoints
-```bash
-# Health check
-curl http://localhost:8000/api/v1/health
-
-# Query
-curl -X POST http://localhost:8000/api/v1/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "What is CUDA?", "n_results": 5}'
-
-# Stats
-curl http://localhost:8000/api/v1/stats
-```
-
-## 🎨 Features
-
-### Backend
-- ✅ FastAPI REST API
-- ✅ RAG (Retrieval-Augmented Generation)
-- ✅ ChromaDB Vector Store
-- ✅ Query Router (classifies queries by type)
-- ✅ Document Scraper for NVIDIA docs
-- ✅ Troubleshooting templates
-
-### Frontend
-- ✅ Modern, animated UI with glassmorphism
-- ✅ Real-time chat interface
-- ✅ Source citations
-- ✅ Query type detection
-- ✅ Example queries
-- ✅ Responsive design
-
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Backend won't start
+- Check that port 8000 is not in use: `lsof -i :8000`
 - Make sure virtual environment is activated
-- Check Python version: `python --version` (should be 3.8+)
-- Reinstall dependencies: `pip install -r requirements.txt`
+- Verify .env file has your API key
 
-### Frontend won't start
-- Check Node version: `node --version` (should be 18+)
-- Delete `node_modules` and reinstall: `rm -rf node_modules && npm install`
+### Frontend won't connect
+- Ensure backend is running on port 8000
+- Check browser console for CORS errors
+- Verify frontend is running on port 3000
 
-### Can't connect to backend
-- Make sure backend is running on port 8000
-- Check CORS settings in `backend/app/main.py`
-- Verify the API URL in `frontend/components/ChatInterface.tsx`
+### No results returned
+- Run `python ingest_data.py` to populate the database
+- Check logs in `backend/*.log` files
 
-## 📖 API Documentation
+---
 
-Once the backend is running, visit http://localhost:8000/docs for interactive API documentation.
+## Advanced: Using OpenAI Instead
 
-### Main Endpoints
+If you prefer OpenAI (requires payment):
 
-#### POST `/api/v1/query`
-Query the NVIDIA Doc Navigator
+1. Get API key from https://platform.openai.com/api-keys
+2. Edit `backend/.env`:
+   ```
+   OPENAI_API_KEY=sk-xxxxxxxxxxxxx
+   # Comment out or leave blank:
+   # HUGGINGFACE_API_KEY=
+   ```
+3. Restart the backend
 
-**Request:**
-```json
-{
-  "query": "How do I configure MIG?",
-  "n_results": 5
-}
+The system will automatically use OpenAI if the key is present.
+
+---
+
+## Project Structure
+
+```
+.
+├── backend/
+│   ├── app/
+│   │   ├── api/          # API routes
+│   │   ├── core/         # Configuration
+│   │   └── services/     # RAG, routing, scraping
+│   ├── .env              # Your API keys (DO NOT COMMIT)
+│   └── requirements.txt
+├── frontend/
+│   ├── app/              # Next.js pages
+│   ├── components/       # React components
+│   └── package.json
+└── README.md
 ```
 
-**Response:**
-```json
-{
-  "query": "How do I configure MIG?",
-  "answer": "Based on NVIDIA's MIG documentation...",
-  "query_type": "mig_config",
-  "confidence": 0.85,
-  "sources": [...],
-  "matched_keywords": ["mig"],
-  "suggested_tags": ["mig", "configuration"]
-}
-```
+---
 
-## 🚢 Deployment
-
-### Backend (Docker)
-```dockerfile
-FROM python:3.11-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-COPY . .
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-### Frontend (Vercel)
-```bash
-cd frontend
-npm run build
-# Deploy to Vercel
-vercel deploy
-```
-
-## 📄 License
-
-This project is for educational purposes.
-
-## 🤝 Contributing
-
-Contributions welcome! Please feel free to submit a Pull Request.
+**Questions?** Check the logs or STATUS.md for more details!
