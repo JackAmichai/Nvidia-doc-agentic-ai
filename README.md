@@ -1,138 +1,105 @@
 # NVIDIA Doc Navigator 🚀
 
-[![NVIDIA Technologies](https://img.shields.io/badge/NVIDIA-NIM%20%7C%20NeMo%20%7C%20CUDA-76B900?style=for-the-badge&logo=nvidia)](https://developer.nvidia.com)
+[![NVIDIA Technologies](https://img.shields.io/badge/NVIDIA-NIM%20%7C%20CUDA%20%7C%20TensorRT-76B900?style=for-the-badge&logo=nvidia)](https://developer.nvidia.com)
 [![Next.js](https://img.shields.io/badge/Next.js-14-black?style=for-the-badge&logo=next.js)](https://nextjs.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.104-009688?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/JackAmichai/Nvidia-doc-agentic-ai&root-directory=frontend)
 
-A Unified AI Assistant for Navigating Fragmented NVIDIA Documentation, powered by **NVIDIA NIM**, **NeMo Guardrails**, and cutting-edge RAG technology.
+A Unified AI Assistant for Navigating NVIDIA Documentation, powered by **NVIDIA NIM** and **DeepSeek R1**.
 
-![NVIDIA Doc Navigator Demo](https://via.placeholder.com/800x400/1a1a2e/76B900?text=NVIDIA+Doc+Navigator)
-
----
-
-## 🌟 NVIDIA Technologies Showcase
-
-This project demonstrates proficiency with the following NVIDIA technologies:
-
-| Technology | Description | Implementation |
-|------------|-------------|----------------|
-| 🧠 **NVIDIA NIM** | State-of-the-art LLM inference | Primary LLM provider via `langchain-nvidia-ai-endpoints` |
-| 🛡️ **NeMo Guardrails** | AI safety rails | Input/output validation, topic control |
-| 📊 **NVML/pynvml** | GPU monitoring | Real-time metrics dashboard |
-| ⚡ **CUDA** | Parallel computing | Backend processing |
-| 🎯 **TensorRT** | Inference optimization | Model acceleration (planned) |
-| 🖥️ **Triton** | Model serving | Embedding deployment (planned) |
+![NVIDIA Doc Navigator](https://img.shields.io/badge/Powered%20by-DeepSeek%20R1-blue?style=for-the-badge)
 
 ---
 
-## 🚀 Quick Start
+## 🌟 Features
 
-### Prerequisites
+| Feature | Description |
+|---------|-------------|
+| 🧠 **NVIDIA NIM** | State-of-the-art LLM inference via DeepSeek R1 |
+| ⚡ **Instant Answers** | Get expert guidance on CUDA, TensorRT, MIG, NVLink |
+| 📚 **Source Citations** | Links to official NVIDIA documentation |
+| 💻 **Code Examples** | References to NVIDIA sample repositories |
+| 🎨 **Modern UI** | Clean, responsive chat interface |
 
-- Python 3.10+
-- Node.js 18+
-- NVIDIA GPU (optional, for real GPU metrics)
-- NVIDIA API Key (get from [build.nvidia.com](https://build.nvidia.com))
+---
 
-### 1. Clone the Repository
+## 🚀 One-Click Deploy to Vercel
+
+### Step 1: Click the Deploy Button
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/JackAmichai/Nvidia-doc-agentic-ai&root-directory=frontend)
+
+### Step 2: Add Environment Variable
+
+In Vercel's deployment settings, add:
+
+| Variable | Value |
+|----------|-------|
+| `NVIDIA_API_KEY` | Your key from [build.nvidia.com](https://build.nvidia.com) |
+
+### Step 3: Done! 🎉
+
+Your NVIDIA Doc Navigator is live!
+
+---
+
+## 💻 Local Development
 
 ```bash
+# Clone the repository
 git clone https://github.com/JackAmichai/Nvidia-doc-agentic-ai.git
-cd Nvidia-doc-agentic-ai
-```
-
-### 2. Backend Setup
-
-```bash
-cd backend
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Configure environment
-cp .env.example .env
-# Edit .env and add your NVIDIA_API_KEY
-
-# Run the server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-### 3. Frontend Setup
-
-```bash
-cd frontend
+cd Nvidia-doc-agentic-ai/frontend
 
 # Install dependencies
 npm install
+
+# Create environment file
+cp .env.example .env.local
+# Edit .env.local and add your NVIDIA_API_KEY
 
 # Run development server
 npm run dev
 ```
 
-### 4. Open the App
-
-Navigate to [http://localhost:3000](http://localhost:3000)
+Open [http://localhost:3000](http://localhost:3000)
 
 ---
 
-## 🔑 API Keys Configuration
-
-### NVIDIA NIM (Primary - Recommended)
+## 🔑 Get Your NVIDIA API Key
 
 1. Go to [build.nvidia.com](https://build.nvidia.com)
 2. Sign up or log in
-3. Select any model and click "Get API Key"
-4. Add to `backend/.env`:
-
-```env
-NVIDIA_API_KEY=nvapi-your-key-here
-NVIDIA_NIM_MODEL=meta/llama-3.1-70b-instruct
-```
-
-### Fallback Options
-
-```env
-# Hugging Face (Free)
-HUGGINGFACE_API_KEY=hf_your_token
-
-# OpenAI (Paid)
-OPENAI_API_KEY=sk-your-key
-```
+3. Click on any model → "Get API Key"
+4. Copy the key starting with `nvapi-`
 
 ---
 
 ## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Frontend (Next.js)                        │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │   Chat UI   │  │ GPU Monitor │  │ Tech Popups │         │
-│  └─────────────┘  └─────────────┘  └─────────────┘         │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Backend (FastAPI)                         │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │  RAG Agent  │  │  Guardrails │  │ GPU Metrics │         │
-│  └─────────────┘  └─────────────┘  └─────────────┘         │
-│         │                │                │                  │
-│         ▼                ▼                ▼                  │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │ NVIDIA NIM  │  │NeMo Guards  │  │   pynvml    │         │
-│  └─────────────┘  └─────────────┘  └─────────────┘         │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Vector Store (ChromaDB)                   │
-│              NVIDIA Documentation & Examples                 │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│              Vercel (Single Deployment)               │
+│  ┌────────────────────────────────────────────────┐  │
+│  │               Next.js Frontend                  │  │
+│  │  ┌──────────────┐  ┌──────────────────────┐   │  │
+│  │  │   Chat UI    │  │  NVIDIA Tech Popups  │   │  │
+│  │  └──────────────┘  └──────────────────────┘   │  │
+│  └────────────────────────────────────────────────┘  │
+│                         │                             │
+│  ┌────────────────────────────────────────────────┐  │
+│  │            Vercel API Routes                    │  │
+│  │  /api/query      → NVIDIA NIM (DeepSeek R1)   │  │
+│  │  /api/health     → Health check                │  │
+│  │  /api/nvidia-info → Tech stack info           │  │
+│  │  /api/gpu-info   → GPU metrics (demo)         │  │
+│  └────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────┘
+                         │
+                         ▼
+          ┌──────────────────────────┐
+          │     NVIDIA NIM API       │
+          │   integrate.api.nvidia   │
+          │   (DeepSeek R1 Model)    │
+          └──────────────────────────┘
 ```
 
 ---
@@ -141,53 +108,32 @@ OPENAI_API_KEY=sk-your-key
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/v1/query` | POST | Query the AI assistant |
-| `/api/v1/gpu-info` | GET | Real-time GPU metrics |
-| `/api/v1/gpu-summary` | GET | GPU status summary |
-| `/api/v1/nvidia-tech-stack` | GET | Active NVIDIA technologies |
-| `/api/v1/guardrails-status` | GET | NeMo Guardrails status |
-| `/api/v1/llm-info` | GET | Current LLM provider info |
-| `/api/v1/health` | GET | Health check |
-| `/api/v1/stats` | GET | Vector store statistics |
+| `/api/query` | POST | Query the AI assistant |
+| `/api/health` | GET | Health check |
+| `/api/nvidia-info` | GET | NVIDIA tech stack info |
+| `/api/gpu-info` | GET | GPU info (demo data) |
+
+### Query Example
+
+```bash
+curl -X POST http://localhost:3000/api/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "How do I configure MIG on A100?"}'
+```
 
 ---
 
-## 🚀 Deployment
+## 🎯 Supported Query Types
 
-### Frontend (Vercel)
-
-1. Push to GitHub
-2. Import project in [Vercel](https://vercel.com)
-3. Set environment variable:
-   - `NEXT_PUBLIC_API_URL`: Your backend URL
-
-### Backend (Railway/Render/Cloud Run)
-
-1. Deploy backend to your preferred platform
-2. Set environment variables from `.env.example`
-3. Update frontend `NEXT_PUBLIC_API_URL`
-
----
-
-## 🎯 Features
-
-### ✅ Implemented
-
-- [x] **NVIDIA NIM Integration** - Primary LLM via NVIDIA's inference service
-- [x] **NeMo Guardrails** - AI safety with topic control & hallucination prevention
-- [x] **GPU Metrics Dashboard** - Real-time monitoring via NVML
-- [x] **RAG Pipeline** - Document retrieval with ChromaDB
-- [x] **Query Router** - Intelligent routing to specialized handlers
-- [x] **Tech Popup System** - Educational popups about NVIDIA technologies
-- [x] **Caching System** - Response caching for performance
-
-### 🔮 Planned
-
-- [ ] Triton Inference Server for embeddings
-- [ ] NVIDIA Riva for voice interface
-- [ ] Milvus with GPU acceleration
-- [ ] LangGraph multi-agent architecture
-- [ ] Interactive CUDA playground
+| Type | Keywords | Example |
+|------|----------|---------|
+| **MIG Config** | mig, multi-instance, partition | "How to configure MIG?" |
+| **CUDA** | cuda, kernel, thread, block | "Why is my CUDA kernel slow?" |
+| **Profiling** | nsight, profile, performance | "How to profile CUDA?" |
+| **TensorRT** | tensorrt, inference, fp16 | "TensorRT optimization guide" |
+| **NVLink** | nvlink, multi-gpu, peer | "Setup NVLink multi-GPU" |
+| **NeMo** | nemo, megatron, llm | "NeMo framework tutorial" |
+| **Triton** | triton, model serving | "Deploy with Triton" |
 
 ---
 
@@ -195,49 +141,53 @@ OPENAI_API_KEY=sk-your-key
 
 ```
 nvidia-doc-agentic-ai/
-├── backend/
-│   ├── app/
-│   │   ├── api/           # API routes and models
-│   │   ├── core/          # Config and logging
-│   │   └── services/      # Business logic
-│   │       ├── rag_agent.py
-│   │       ├── guardrails.py
-│   │       ├── gpu_metrics.py
-│   │       └── ...
-│   ├── guardrails/        # NeMo Guardrails config
-│   ├── requirements.txt
-│   └── .env.example
-├── frontend/
-│   ├── app/               # Next.js pages
-│   ├── components/        # React components
-│   │   ├── ChatInterface.tsx
-│   │   ├── GPUDashboard.tsx
-│   │   └── NvidiaTechPopup.tsx
-│   └── package.json
-├── docker-compose.yml
-└── README.md
+└── frontend/
+    ├── app/
+    │   ├── api/                    # Serverless API routes
+    │   │   ├── query/route.ts      # Main AI query endpoint
+    │   │   ├── health/route.ts     # Health check
+    │   │   ├── nvidia-info/route.ts # Tech stack info
+    │   │   └── gpu-info/route.ts   # GPU metrics (demo)
+    │   ├── page.tsx                # Main page
+    │   └── layout.tsx              # Root layout
+    ├── components/
+    │   ├── ChatInterface.tsx       # Chat UI component
+    │   ├── NvidiaTechPopup.tsx     # NVIDIA tech popups
+    │   └── Header.tsx              # Header component
+    ├── package.json
+    ├── vercel.json
+    └── .env.example
 ```
+
+---
+
+## 🔧 Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `NVIDIA_API_KEY` | Yes | - | Your NVIDIA NIM API key |
+| `NVIDIA_MODEL` | No | `deepseek-ai/deepseek-r1` | Model to use |
+| `NVIDIA_BASE_URL` | No | `https://integrate.api.nvidia.com/v1` | API endpoint |
+
+---
+
+## 🛡️ Security
+
+- API keys are stored as environment variables (never in code)
+- `.env.local` is gitignored
+- API calls happen server-side (keys not exposed to browser)
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions welcome! Please submit a Pull Request.
 
 ---
 
 ## 📄 License
 
-This project is for demonstration purposes. See individual NVIDIA SDKs for their respective licenses.
-
----
-
-## 🙏 Acknowledgments
-
-- [NVIDIA NIM](https://developer.nvidia.com/nim)
-- [NeMo Guardrails](https://github.com/NVIDIA/NeMo-Guardrails)
-- [LangChain](https://langchain.com)
-- [ChromaDB](https://trychroma.com)
+MIT License - See individual NVIDIA SDKs for their respective licenses.
 
 ---
 

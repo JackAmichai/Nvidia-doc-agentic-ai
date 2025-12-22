@@ -84,18 +84,17 @@ export default function NvidiaDocNavigator() {
         setIsTyping(true);
 
         // Show NVIDIA tech popups based on what technologies are being used
-        // Show NeMo Guardrails popup on first query
-        if (!shownTechs.has('nemo-guardrails')) {
+        // Show NIM popup on first query (since we're using NVIDIA NIM)
+        if (!shownTechs.has('nim')) {
             setTimeout(() => {
-                showPopup('nemo-guardrails');
-                setShownTechs(prev => new Set(prev).add('nemo-guardrails'));
+                showPopup('nim');
+                setShownTechs(prev => new Set(prev).add('nim'));
             }, 500);
         }
 
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-        
+        // Use local API route (serverless function)
         try {
-            const response = await fetch(`${API_URL}/api/v1/query`, {
+            const response = await fetch('/api/query', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -120,20 +119,20 @@ export default function NvidiaDocNavigator() {
             };
             setMessages(prev => [...prev, aiMessage]);
 
-            // Show NIM popup on successful response (first time only)
-            if (!shownTechs.has('nim')) {
+            // Show CUDA popup for programming queries
+            if (!shownTechs.has('cuda') && (data.query_type === 'cuda_general' || data.query_type === 'cuda_profiling')) {
                 setTimeout(() => {
-                    showPopup('nim');
-                    setShownTechs(prev => new Set(prev).add('nim'));
+                    showPopup('cuda');
+                    setShownTechs(prev => new Set(prev).add('cuda'));
                 }, 1000);
             }
 
-            // Show Triton popup for embedding-related queries
-            if (!shownTechs.has('triton') && messages.length >= 2) {
+            // Show TensorRT popup for inference queries
+            if (!shownTechs.has('tensorrt') && data.query_type === 'tensorrt') {
                 setTimeout(() => {
-                    showPopup('triton');
-                    setShownTechs(prev => new Set(prev).add('triton'));
-                }, 1500);
+                    showPopup('tensorrt');
+                    setShownTechs(prev => new Set(prev).add('tensorrt'));
+                }, 1000);
             }
 
         } catch (error) {
