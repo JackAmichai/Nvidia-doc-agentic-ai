@@ -261,12 +261,18 @@ export default function NvidiaTechPopup({
           
           {/* Learn More Button */}
           <button
-            onClick={() => setIsExpanded(!isExpanded)}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsExpanded(!isExpanded);
+            }}
+            type="button"
             className={`
               mt-3 w-full flex items-center justify-center gap-2 
               px-4 py-2.5 rounded-xl text-sm font-medium
-              bg-white/5 hover:bg-white/10 border border-white/10
+              bg-white/10 hover:bg-white/20 border border-white/20
               text-white transition-all duration-200
+              cursor-pointer select-none
             `}
           >
             {isExpanded ? (
