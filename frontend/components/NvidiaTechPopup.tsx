@@ -260,19 +260,23 @@ export default function NvidiaTechPopup({
           </div>
           
           {/* Learn More Button */}
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setIsExpanded(!isExpanded);
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setIsExpanded(!isExpanded)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setIsExpanded(!isExpanded);
+              }
             }}
-            type="button"
             className={`
               mt-3 w-full flex items-center justify-center gap-2 
               px-4 py-2.5 rounded-xl text-sm font-medium
               bg-white/10 hover:bg-white/20 border border-white/20
               text-white transition-all duration-200
               cursor-pointer select-none
+              focus:outline-none focus:ring-2 focus:ring-white/30
             `}
           >
             {isExpanded ? (
@@ -286,7 +290,7 @@ export default function NvidiaTechPopup({
                 <ChevronDown className="w-4 h-4" />
               </>
             )}
-          </button>
+          </div>
         </div>
         
         {/* Expanded Content */}
