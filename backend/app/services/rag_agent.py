@@ -14,7 +14,14 @@ from app.services.guardrails import guardrails_service
 from app.core.logger import setup_logger
 from app.core.config import settings
 
-# Import LangChain components
+# Import OpenAI client (works with NVIDIA NIM API)
+try:
+    from openai import OpenAI
+    HAS_OPENAI = True
+except ImportError:
+    HAS_OPENAI = False
+
+# Import LangChain components as fallback
 try:
     from langchain_openai import ChatOpenAI
     from langchain_huggingface import HuggingFaceEndpoint
@@ -24,14 +31,38 @@ try:
 except ImportError:
     HAS_LANGCHAIN = False
 
-# Import NVIDIA NIM
-try:
-    from langchain_nvidia_ai_endpoints import ChatNVIDIA
-    HAS_NVIDIA_NIM = True
-except ImportError:
-    HAS_NVIDIA_NIM = False
-
 logger = setup_logger(__name__, "rag_agent.log")
+
+
+class NVIDIAClient:
+    """Wrapper for NVIDIA NIM API using OpenAI-compatible client."""
+    
+    def __init__(self, api_key: str, base_url: str, model: str):
+        self.client = OpenAI(
+            base_url=base_url,
+            api_key=api_key
+        )
+        self.model = model
+    
+    def invoke(self, prompt: str) -> str:
+        """Invoke the model with a prompt."""
+        completion = self.client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.6,
+            top_p=0.7,
+            max_tokens=4096,
+            stream=False
+        )
+        
+        # Handle DeepSeek R1's reasoning content
+        reasoning = getattr(completion.choices[0].message, "reasoning_content", None)
+        response = completion.choices[0].message.content
+        
+        if reasoning:
+            logger.info(f"Model reasoning: {reasoning[:200]}...")
+        
+        return response
 
 
 class RAGAgent:
@@ -73,15 +104,13 @@ Answer:"""
     def _initialize_llm(self):
         """Initialize LLM with NVIDIA NIM as primary, fallback to others."""
         
-        # Priority 1: NVIDIA NIM (Preferred for showcasing NVIDIA capabilities)
-        if HAS_NVIDIA_NIM and settings.NVIDIA_API_KEY:
+        # Priority 1: NVIDIA NIM via OpenAI-compatible API (DeepSeek R1)
+        if HAS_OPENAI and settings.NVIDIA_API_KEY:
             try:
-                self.llm = ChatNVIDIA(
-                    model=settings.NVIDIA_NIM_MODEL,
+                self.llm = NVIDIAClient(
                     api_key=settings.NVIDIA_API_KEY,
                     base_url=settings.NVIDIA_NIM_BASE_URL,
-                    temperature=0.2,
-                    max_tokens=1024
+                    model=settings.NVIDIA_NIM_MODEL
                 )
                 self.llm_provider = "nvidia_nim"
                 logger.info(f"✅ NVIDIA NIM initialized ({settings.NVIDIA_NIM_MODEL})")
@@ -334,7 +363,7 @@ Answer:"""
         debug_flow: Dict = None
     ) -> str:
         """
-        Generate answer using LLM (Hugging Face or OpenAI).
+        Generate answer using LLM (NVIDIA NIM, Hugging Face, or OpenAI).
         """
         try:
             # Build context from retrieved documents
@@ -359,19 +388,26 @@ Answer:"""
             
             context = "\n".join(context_parts)
             
-            # Create prompt
-            prompt = PromptTemplate.from_template(self.SYSTEM_PROMPT)
+            # Format the full prompt
+            full_prompt = self.SYSTEM_PROMPT.format(context=context, question=query)
             
-            # Create chain
-            chain = prompt | self.llm | StrOutputParser()
+            # Use NVIDIA NIM client directly (OpenAI-compatible)
+            if self.llm_provider == "nvidia_nim" and isinstance(self.llm, NVIDIAClient):
+                response = self.llm.invoke(full_prompt)
+                return response
             
-            # Execute chain
-            response = chain.invoke({
-                "context": context,
-                "question": query
-            })
+            # Use LangChain for other providers (HuggingFace, OpenAI)
+            if HAS_LANGCHAIN:
+                prompt = PromptTemplate.from_template(self.SYSTEM_PROMPT)
+                chain = prompt | self.llm | StrOutputParser()
+                response = chain.invoke({
+                    "context": context,
+                    "question": query
+                })
+                return response
             
-            return response
+            # Fallback
+            return self._generate_mock_answer(query, docs, query_type, None, compatibility_info, debug_flow)
             
         except Exception as e:
             logger.error(f"Error generating LLM answer: {str(e)}")
