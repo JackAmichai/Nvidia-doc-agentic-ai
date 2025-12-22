@@ -10,6 +10,7 @@ from app.services.cache import cache_service
 from app.services.github_search import github_service
 from app.services.compatibility import compatibility_service
 from app.services.debugger import debugger_service
+from app.services.guardrails import guardrails_service
 from app.core.logger import setup_logger
 from app.core.config import settings
 
@@ -22,6 +23,13 @@ try:
     HAS_LANGCHAIN = True
 except ImportError:
     HAS_LANGCHAIN = False
+
+# Import NVIDIA NIM
+try:
+    from langchain_nvidia_ai_endpoints import ChatNVIDIA
+    HAS_NVIDIA_NIM = True
+except ImportError:
+    HAS_NVIDIA_NIM = False
 
 logger = setup_logger(__name__, "rag_agent.log")
 
@@ -57,38 +65,73 @@ Answer:"""
         self.query_router = QueryRouter()
         self.use_llm = use_llm
         self.llm = None
+        self.llm_provider = None  # Track which LLM provider is being used
         
-        if self.use_llm and HAS_LANGCHAIN:
-            # Try Hugging Face first (User Preference)
-            if settings.HUGGINGFACE_API_KEY:
-                try:
-                    self.llm = HuggingFaceEndpoint(
-                        repo_id=settings.HUGGINGFACE_REPO_ID,
-                        huggingfacehub_api_token=settings.HUGGINGFACE_API_KEY,
-                        temperature=0.2,
-                        max_new_tokens=512
-                    )
-                    logger.info(f"Hugging Face LLM initialized ({settings.HUGGINGFACE_REPO_ID})")
-                except Exception as e:
-                    logger.error(f"Failed to initialize Hugging Face LLM: {str(e)}")
-                    self.use_llm = False
-            
-            # Fallback to OpenAI if configured and HF failed or not set
-            elif settings.OPENAI_API_KEY:
-                try:
-                    self.llm = ChatOpenAI(
-                        api_key=settings.OPENAI_API_KEY,
-                        model="gpt-4-turbo-preview",
-                        temperature=0.2
-                    )
-                    logger.info("OpenAI LLM initialized")
-                except Exception as e:
-                    logger.error(f"Failed to initialize OpenAI LLM: {str(e)}")
-                    self.use_llm = False
-            
-            else:
-                logger.warning("No API keys found. Falling back to mock responses.")
-                self.use_llm = False
+        if self.use_llm:
+            self._initialize_llm()
+    
+    def _initialize_llm(self):
+        """Initialize LLM with NVIDIA NIM as primary, fallback to others."""
+        
+        # Priority 1: NVIDIA NIM (Preferred for showcasing NVIDIA capabilities)
+        if HAS_NVIDIA_NIM and settings.NVIDIA_API_KEY:
+            try:
+                self.llm = ChatNVIDIA(
+                    model=settings.NVIDIA_NIM_MODEL,
+                    api_key=settings.NVIDIA_API_KEY,
+                    base_url=settings.NVIDIA_NIM_BASE_URL,
+                    temperature=0.2,
+                    max_tokens=1024
+                )
+                self.llm_provider = "nvidia_nim"
+                logger.info(f"✅ NVIDIA NIM initialized ({settings.NVIDIA_NIM_MODEL})")
+                return
+            except Exception as e:
+                logger.error(f"Failed to initialize NVIDIA NIM: {str(e)}")
+        
+        # Priority 2: Hugging Face
+        if HAS_LANGCHAIN and settings.HUGGINGFACE_API_KEY:
+            try:
+                self.llm = HuggingFaceEndpoint(
+                    repo_id=settings.HUGGINGFACE_REPO_ID,
+                    huggingfacehub_api_token=settings.HUGGINGFACE_API_KEY,
+                    temperature=0.2,
+                    max_new_tokens=512
+                )
+                self.llm_provider = "huggingface"
+                logger.info(f"✅ Hugging Face LLM initialized ({settings.HUGGINGFACE_REPO_ID})")
+                return
+            except Exception as e:
+                logger.error(f"Failed to initialize Hugging Face LLM: {str(e)}")
+        
+        # Priority 3: OpenAI
+        if HAS_LANGCHAIN and settings.OPENAI_API_KEY:
+            try:
+                self.llm = ChatOpenAI(
+                    api_key=settings.OPENAI_API_KEY,
+                    model="gpt-4-turbo-preview",
+                    temperature=0.2
+                )
+                self.llm_provider = "openai"
+                logger.info("✅ OpenAI LLM initialized")
+                return
+            except Exception as e:
+                logger.error(f"Failed to initialize OpenAI LLM: {str(e)}")
+        
+        # No LLM available
+        logger.warning("⚠️ No LLM API keys found. Using mock responses.")
+        self.use_llm = False
+        self.llm_provider = None
+    
+    def get_llm_info(self) -> Dict:
+        """Return information about the current LLM provider."""
+        return {
+            "provider": self.llm_provider,
+            "model": settings.NVIDIA_NIM_MODEL if self.llm_provider == "nvidia_nim" else 
+                     settings.HUGGINGFACE_REPO_ID if self.llm_provider == "huggingface" else
+                     "gpt-4-turbo-preview" if self.llm_provider == "openai" else None,
+            "is_nvidia": self.llm_provider == "nvidia_nim"
+        }
     
     def query(self, user_query: str, n_results: int = 5, include_code_examples: bool = True) -> Dict:
         """
@@ -96,6 +139,24 @@ Answer:"""
         """
         try:
             logger.info(f"Processing query: '{user_query[:100]}...'")
+            
+            # Step 0: Apply NeMo Guardrails input check
+            is_allowed, rejection_msg = guardrails_service.check_input(user_query)
+            if not is_allowed:
+                logger.warning(f"Query blocked by guardrails: {user_query[:50]}...")
+                return {
+                    "query": user_query,
+                    "answer": rejection_msg,
+                    "query_type": "blocked",
+                    "confidence": 1.0,
+                    "sources": [],
+                    "code_examples": [],
+                    "matched_keywords": [],
+                    "suggested_tags": ["guardrails", "safety"],
+                    "llm_info": self.get_llm_info(),
+                    "nvidia_technologies": ["nemo-guardrails"],
+                    "guardrails_triggered": True
+                }
             
             # Check cache first
             cache_params = {"n_results": n_results, "include_code": include_code_examples}
@@ -129,6 +190,10 @@ Answer:"""
             else:
                 answer = self._generate_mock_answer(user_query, retrieved_docs, query_type, code_examples, compatibility_info, debug_flow)
             
+            # Step 6.5: Apply NeMo Guardrails output check
+            context = "\n".join([doc.get('content', '') for doc in retrieved_docs[:3]])
+            _, answer = guardrails_service.check_output(answer, context)
+            
             # Step 7: Format response
             result = {
                 "query": user_query,
@@ -145,7 +210,9 @@ Answer:"""
                 ],
                 "code_examples": code_examples,
                 "matched_keywords": routing_result['matched_keywords'],
-                "suggested_tags": routing_result['suggested_tags']
+                "suggested_tags": routing_result['suggested_tags'],
+                "llm_info": self.get_llm_info(),  # Include LLM provider info
+                "nvidia_technologies": self._get_active_nvidia_tech()
             }
             
             # Cache the result
@@ -157,6 +224,23 @@ Answer:"""
         except Exception as e:
             logger.error(f"Error processing query: {str(e)}")
             raise RuntimeError(f"Query processing failed: {str(e)}")
+    
+    def _get_active_nvidia_tech(self) -> List[str]:
+        """Return list of active NVIDIA technologies being used."""
+        active_tech = []
+        
+        # Check LLM provider
+        if self.llm_provider == "nvidia_nim":
+            active_tech.append("nim")
+        
+        # Guardrails (if enabled)
+        if settings.ENABLE_GUARDRAILS:
+            active_tech.append("nemo-guardrails")
+        
+        # Always using these in the pipeline
+        active_tech.append("cuda")  # Backend processing
+        
+        return active_tech
     
     def _get_code_examples(self, query: str, query_type: QueryType) -> List[Dict]:
         """Get relevant code examples from GitHub."""

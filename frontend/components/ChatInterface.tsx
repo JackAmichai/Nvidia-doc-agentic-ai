@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, Zap, Code, Server, Cpu, ExternalLink, AlertCircle, Loader2 } from 'lucide-react';
+import { Send, Sparkles, Zap, Code, Server, Cpu, ExternalLink, AlertCircle, Loader2, Shield, Brain, Mic, Database } from 'lucide-react';
+import NvidiaTechPopup, { useNvidiaTechPopup, NvidiaTechType } from './NvidiaTechPopup';
 
 interface Source {
     title: string;
@@ -38,6 +39,10 @@ export default function NvidiaDocNavigator() {
     const [input, setInput] = useState('');
     const [isTyping, setIsTyping] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    
+    // NVIDIA Tech Popup state
+    const { activePopup, showPopup, hidePopup } = useNvidiaTechPopup();
+    const [shownTechs, setShownTechs] = useState<Set<NvidiaTechType>>(new Set());
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -78,8 +83,19 @@ export default function NvidiaDocNavigator() {
         setInput('');
         setIsTyping(true);
 
+        // Show NVIDIA tech popups based on what technologies are being used
+        // Show NeMo Guardrails popup on first query
+        if (!shownTechs.has('nemo-guardrails')) {
+            setTimeout(() => {
+                showPopup('nemo-guardrails');
+                setShownTechs(prev => new Set(prev).add('nemo-guardrails'));
+            }, 500);
+        }
+
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        
         try {
-            const response = await fetch('http://localhost:8000/api/v1/query', {
+            const response = await fetch(`${API_URL}/api/v1/query`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -103,6 +119,22 @@ export default function NvidiaDocNavigator() {
                 data: data
             };
             setMessages(prev => [...prev, aiMessage]);
+
+            // Show NIM popup on successful response (first time only)
+            if (!shownTechs.has('nim')) {
+                setTimeout(() => {
+                    showPopup('nim');
+                    setShownTechs(prev => new Set(prev).add('nim'));
+                }, 1000);
+            }
+
+            // Show Triton popup for embedding-related queries
+            if (!shownTechs.has('triton') && messages.length >= 2) {
+                setTimeout(() => {
+                    showPopup('triton');
+                    setShownTechs(prev => new Set(prev).add('triton'));
+                }, 1500);
+            }
 
         } catch (error) {
             console.error("Failed to fetch answer:", error);
@@ -140,11 +172,34 @@ export default function NvidiaDocNavigator() {
                             <p className="text-xs text-gray-400">Your AI assistant for NVIDIA documentation</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                        <span className="px-3 py-1 bg-green-500/10 border border-green-500/20 rounded-full text-xs text-green-400">
-                            Online
-                        </span>
+                    <div className="flex items-center gap-4">
+                        {/* Active NVIDIA Tech indicators */}
+                        <div className="hidden md:flex items-center gap-2">
+                            {shownTechs.has('nemo-guardrails') && (
+                                <button 
+                                    onClick={() => showPopup('nemo-guardrails')}
+                                    className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full text-xs text-blue-400 hover:bg-blue-500/20 transition-colors"
+                                >
+                                    <Shield className="w-3 h-3" />
+                                    <span>Guardrails</span>
+                                </button>
+                            )}
+                            {shownTechs.has('nim') && (
+                                <button 
+                                    onClick={() => showPopup('nim')}
+                                    className="flex items-center gap-1.5 px-2.5 py-1 bg-green-500/10 border border-green-500/20 rounded-full text-xs text-green-400 hover:bg-green-500/20 transition-colors"
+                                >
+                                    <Brain className="w-3 h-3" />
+                                    <span>NIM</span>
+                                </button>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                            <span className="px-3 py-1 bg-green-500/10 border border-green-500/20 rounded-full text-xs text-green-400">
+                                Online
+                            </span>
+                        </div>
                     </div>
                 </div>
             </header>
@@ -341,11 +396,47 @@ export default function NvidiaDocNavigator() {
                             {isTyping ? <Loader2 className="w-5 h-5 text-white animate-spin" /> : <Send className="w-5 h-5 text-white" />}
                         </button>
                     </div>
-                    <p className="text-xs text-gray-500 mt-4 text-center">
-                        Powered by <span className="text-green-400 font-semibold">RAG</span> • <span className="text-green-400 font-semibold">ChromaDB</span> • <span className="text-green-400 font-semibold">FastAPI</span>
-                    </p>
+                    {/* Powered by section with clickable NVIDIA tech badges */}
+                    <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
+                        <span className="text-xs text-gray-500">Powered by</span>
+                        <button 
+                            onClick={() => showPopup('nim')}
+                            className="px-2 py-1 text-xs bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 rounded-full text-green-400 transition-colors cursor-pointer"
+                        >
+                            NVIDIA NIM
+                        </button>
+                        <button 
+                            onClick={() => showPopup('nemo-guardrails')}
+                            className="px-2 py-1 text-xs bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-full text-blue-400 transition-colors cursor-pointer"
+                        >
+                            NeMo Guardrails
+                        </button>
+                        <button 
+                            onClick={() => showPopup('triton')}
+                            className="px-2 py-1 text-xs bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-full text-purple-400 transition-colors cursor-pointer"
+                        >
+                            Triton
+                        </button>
+                        <button 
+                            onClick={() => showPopup('tensorrt')}
+                            className="px-2 py-1 text-xs bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/20 rounded-full text-orange-400 transition-colors cursor-pointer"
+                        >
+                            TensorRT
+                        </button>
+                    </div>
                 </div>
             </div>
+
+            {/* NVIDIA Tech Popup */}
+            {activePopup && (
+                <NvidiaTechPopup
+                    techType={activePopup}
+                    isVisible={true}
+                    onClose={hidePopup}
+                    position="bottom-right"
+                    autoHide={8000}
+                />
+            )}
         </div>
     );
 }

@@ -11,6 +11,8 @@ from app.api.models import (
 from app.services.vector_store import VectorStoreService
 from app.services.rag_agent import RAGAgent
 from app.services.cache import cache_service
+from app.services.gpu_metrics import gpu_metrics_service
+from app.services.guardrails import guardrails_service
 from app.core.logger import setup_logger
 from app.core.config import settings
 
@@ -21,7 +23,7 @@ router = APIRouter()
 try:
     vector_store = VectorStoreService()
     # Enable LLM if API key is present
-    use_llm = bool(settings.OPENAI_API_KEY or settings.HUGGINGFACE_API_KEY)
+    use_llm = bool(settings.NVIDIA_API_KEY or settings.OPENAI_API_KEY or settings.HUGGINGFACE_API_KEY)
     rag_agent = RAGAgent(vector_store, use_llm=use_llm)
     logger.info(f"API services initialized successfully (LLM enabled: {use_llm})")
 except Exception as e:
@@ -184,4 +186,114 @@ async def health_check():
             status="degraded",
             message=f"API is running but some services may be unavailable: {str(e)}",
             version=settings.PROJECT_VERSION
+        )
+
+
+@router.get("/gpu-info")
+async def get_gpu_info():
+    """
+    Get GPU information and metrics using NVIDIA NVML.
+    
+    Returns real-time GPU utilization, memory, temperature, and MIG status.
+    """
+    try:
+        gpu_info = gpu_metrics_service.get_all_gpu_info()
+        return gpu_info
+    except Exception as e:
+        logger.error(f"Error getting GPU info: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve GPU information: {str(e)}"
+        )
+
+
+@router.get("/gpu-summary")
+async def get_gpu_summary():
+    """
+    Get a quick summary of GPU status.
+    """
+    try:
+        return gpu_metrics_service.get_gpu_summary()
+    except Exception as e:
+        logger.error(f"Error getting GPU summary: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve GPU summary"
+        )
+
+
+@router.get("/guardrails-status")
+async def get_guardrails_status():
+    """
+    Get NeMo Guardrails status and configuration.
+    """
+    try:
+        return guardrails_service.get_status()
+    except Exception as e:
+        logger.error(f"Error getting guardrails status: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve guardrails status"
+        )
+
+
+@router.get("/llm-info")
+async def get_llm_info():
+    """
+    Get information about the current LLM provider.
+    """
+    try:
+        return rag_agent.get_llm_info()
+    except Exception as e:
+        logger.error(f"Error getting LLM info: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve LLM information"
+        )
+
+
+@router.get("/nvidia-tech-stack")
+async def get_nvidia_tech_stack():
+    """
+    Get information about all NVIDIA technologies used in the application.
+    """
+    try:
+        llm_info = rag_agent.get_llm_info()
+        gpu_summary = gpu_metrics_service.get_gpu_summary()
+        guardrails_status = guardrails_service.get_status()
+        
+        return {
+            "nvidia_technologies": {
+                "nim": {
+                    "name": "NVIDIA NIM",
+                    "active": llm_info.get("is_nvidia", False),
+                    "model": llm_info.get("model") if llm_info.get("is_nvidia") else None,
+                    "description": "NVIDIA Inference Microservices for optimized LLM inference"
+                },
+                "nemo_guardrails": {
+                    "name": "NeMo Guardrails",
+                    "active": guardrails_status.get("enabled", False),
+                    "description": "AI safety rails for preventing hallucinations and off-topic responses"
+                },
+                "nvml": {
+                    "name": "NVIDIA Management Library",
+                    "active": not gpu_summary.get("mock_data", True),
+                    "gpu_count": gpu_summary.get("gpu_count", 0),
+                    "description": "Real-time GPU monitoring and management"
+                },
+                "cuda": {
+                    "name": "NVIDIA CUDA",
+                    "active": True,
+                    "description": "Parallel computing platform powering GPU acceleration"
+                }
+            },
+            "llm_provider": llm_info,
+            "gpu_summary": gpu_summary,
+            "guardrails": guardrails_status
+        }
+    except Exception as e:
+        logger.error(f"Error getting NVIDIA tech stack: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve NVIDIA technology stack information"
         )

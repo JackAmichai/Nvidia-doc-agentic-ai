@@ -39,6 +39,9 @@ class QueryResponse(BaseModel):
     code_examples: List[CodeExample] = []
     matched_keywords: List[str]
     suggested_tags: List[str]
+    llm_info: Optional[Dict] = None
+    nvidia_technologies: Optional[List[str]] = []
+    guardrails_triggered: Optional[bool] = False
 
 
 class DocumentInput(BaseModel):

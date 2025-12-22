@@ -1,4 +1,43 @@
+# Dependencies
 node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+venv/
+.venv/
+
+# Environment files (NEVER commit these!)
 .env
-.DS_Store
+.env.local
+.env.*.local
+backend/.env
+frontend/.env.local
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+
+# Database
+*.db
+chroma_db/
+backend/chroma_db/
+
+# Logs
 *.log
+logs/
+backend/logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Vercel
+.vercel

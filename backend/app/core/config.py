@@ -17,7 +17,12 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     DEBUG: bool = Field(default=False, description="Enable debug mode")
     
-    # LLM API Keys (optional for MVP)
+    # NVIDIA NIM API Configuration (Primary)
+    NVIDIA_API_KEY: Optional[str] = Field(default=None, description="NVIDIA NIM API key")
+    NVIDIA_NIM_MODEL: str = Field(default="meta/llama-3.1-70b-instruct", description="NVIDIA NIM model ID")
+    NVIDIA_NIM_BASE_URL: str = Field(default="https://integrate.api.nvidia.com/v1", description="NVIDIA NIM base URL")
+    
+    # Fallback LLM API Keys
     OPENAI_API_KEY: Optional[str] = Field(default=None, description="OpenAI API key for LLM")
     ANTHROPIC_API_KEY: Optional[str] = Field(default=None, description="Anthropic API key for Claude")
     HUGGINGFACE_API_KEY: Optional[str] = Field(default=None, description="Hugging Face API Token")
@@ -39,9 +44,13 @@ class Settings(BaseSettings):
     ENABLE_CACHE: bool = Field(default=True, description="Enable query caching")
     CACHE_TTL: int = Field(default=3600, ge=60, description="Cache TTL in seconds")
     
+    # NeMo Guardrails Configuration
+    ENABLE_GUARDRAILS: bool = Field(default=True, description="Enable NeMo Guardrails")
+    GUARDRAILS_CONFIG_PATH: str = Field(default="./guardrails", description="Path to guardrails config")
+    
     # CORS Configuration
     CORS_ORIGINS: list[str] = Field(
-        default=["http://localhost:3000", "http://127.0.0.1:3000"],
+        default=["http://localhost:3000", "http://127.0.0.1:3000", "https://*.vercel.app"],
         description="Allowed CORS origins"
     )
     
