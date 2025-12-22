@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, Zap, Code, Server, Cpu, ExternalLink, AlertCircle, Loader2, Shield, Brain, Mic, Database } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Send, Sparkles, Zap, Code, Server, Cpu, ExternalLink, AlertCircle, Loader2, Shield, Brain, Mic, Database, XCircle } from 'lucide-react';
 import NvidiaTechPopup, { useNvidiaTechPopup, NvidiaTechType } from './NvidiaTechPopup';
 
 interface Source {
@@ -34,23 +34,47 @@ interface Message {
     error?: boolean;
 }
 
+// Request timeout configuration
+const REQUEST_TIMEOUT_MS = 35000; // 35 seconds (slightly more than API timeout)
+
 export default function NvidiaDocNavigator() {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [isTyping, setIsTyping] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     
+    // AbortController ref for request cancellation
+    const abortControllerRef = useRef<AbortController | null>(null);
+    
     // NVIDIA Tech Popup state
     const { activePopup, showPopup, hidePopup } = useNvidiaTechPopup();
     const [shownTechs, setShownTechs] = useState<Set<NvidiaTechType>>(new Set());
 
-    const scrollToBottom = () => {
+    const scrollToBottom = useCallback(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    };
+    }, []);
 
     useEffect(() => {
         scrollToBottom();
-    }, [messages, isTyping]);
+    }, [messages, isTyping, scrollToBottom]);
+    
+    // Cleanup: Cancel any pending requests on unmount
+    useEffect(() => {
+        return () => {
+            if (abortControllerRef.current) {
+                abortControllerRef.current.abort();
+            }
+        };
+    }, []);
+    
+    // Cancel current request handler
+    const cancelRequest = useCallback(() => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+            setIsTyping(false);
+        }
+    }, []);
 
     const suggestedPrompts = [
         {
@@ -76,12 +100,21 @@ export default function NvidiaDocNavigator() {
     ];
 
     const handleSend = async (text = input) => {
-        if (!text.trim()) return;
+        if (!text.trim() || isTyping) return;
 
         const userMessage: Message = { role: 'user', content: text };
         setMessages(prev => [...prev, userMessage]);
         setInput('');
         setIsTyping(true);
+
+        // Cancel any existing request
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+        
+        // Create new AbortController for this request
+        abortControllerRef.current = new AbortController();
+        const { signal } = abortControllerRef.current;
 
         // Show NVIDIA tech popups based on what technologies are being used
         // Show NIM popup on first query (since we're using NVIDIA NIM)
@@ -91,6 +124,13 @@ export default function NvidiaDocNavigator() {
                 setShownTechs(prev => new Set(prev).add('nim'));
             }, 500);
         }
+
+        // Create timeout for the request
+        const timeoutId = setTimeout(() => {
+            if (abortControllerRef.current) {
+                abortControllerRef.current.abort();
+            }
+        }, REQUEST_TIMEOUT_MS);
 
         // Use local API route (serverless function)
         try {
@@ -104,9 +144,20 @@ export default function NvidiaDocNavigator() {
                     n_results: 5,
                     include_code_examples: true
                 }),
+                signal,
             });
+            
+            clearTimeout(timeoutId);
 
             if (!response.ok) {
+                // Handle specific error codes
+                if (response.status === 429) {
+                    throw new Error('Rate limit exceeded. Please wait a moment before trying again.');
+                }
+                if (response.status === 400) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Invalid request');
+                }
                 throw new Error(`API Error: ${response.statusText}`);
             }
 
@@ -136,15 +187,26 @@ export default function NvidiaDocNavigator() {
             }
 
         } catch (error) {
+            clearTimeout(timeoutId);
+            
+            // Don't show error if request was intentionally cancelled
+            if (error instanceof Error && error.name === 'AbortError') {
+                console.log('Request cancelled by user');
+                return;
+            }
+            
             console.error("Failed to fetch answer:", error);
             const errorMessage: Message = {
                 role: 'assistant',
-                content: "I'm sorry, I encountered an error while connecting to the NVIDIA documentation server. Please ensure the backend is running.",
+                content: error instanceof Error 
+                    ? error.message 
+                    : "I'm sorry, I encountered an error while connecting to the NVIDIA documentation server. Please ensure the backend is running.",
                 error: true
             };
             setMessages(prev => [...prev, errorMessage]);
         } finally {
             setIsTyping(false);
+            abortControllerRef.current = null;
         }
     };
 
@@ -359,12 +421,19 @@ export default function NvidiaDocNavigator() {
                                     <div className="w-11 h-11 bg-gradient-to-br from-green-400 to-emerald-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-green-500/30">
                                         <Loader2 className="w-6 h-6 text-white animate-spin" />
                                     </div>
-                                    <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl rounded-tl-md px-6 py-4">
+                                    <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl rounded-tl-md px-6 py-4 flex items-center gap-4">
                                         <div className="flex gap-1.5">
                                             <div className="w-2.5 h-2.5 bg-green-400 rounded-full animate-bounce"></div>
                                             <div className="w-2.5 h-2.5 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '0.15s' }}></div>
                                             <div className="w-2.5 h-2.5 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '0.3s' }}></div>
                                         </div>
+                                        <button
+                                            onClick={cancelRequest}
+                                            className="ml-2 flex items-center gap-1 px-3 py-1 text-xs bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 rounded-full text-red-400 transition-colors"
+                                        >
+                                            <XCircle className="w-3 h-3" />
+                                            Cancel
+                                        </button>
                                     </div>
                                 </div>
                             )}

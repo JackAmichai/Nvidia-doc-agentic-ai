@@ -1,10 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-// NVIDIA NIM Configuration
+// NVIDIA NIM Configuration - Use secure environment variable access
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
 const NVIDIA_BASE_URL = process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1';
 const NVIDIA_MODEL = process.env.NVIDIA_MODEL || 'deepseek-ai/deepseek-r1';
+
+// API Configuration Constants - Best practices for NVIDIA NIM
+const API_TIMEOUT_MS = 30000; // 30 second timeout for LLM responses
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 1000; // Base delay for exponential backoff
+const MAX_QUERY_LENGTH = 4000; // Prevent token overflow
+const RATE_LIMIT_WINDOW_MS = 60000; // 1 minute window
+const MAX_REQUESTS_PER_WINDOW = 30;
+
+// Simple in-memory rate limiting (for production, use Redis)
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+
+// Utility: Sleep for retry backoff
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Utility: Sanitize user input
+function sanitizeInput(input: string): string {
+    return input
+        .trim()
+        .replace(/<[^>]*>/g, '') // Remove HTML tags
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove control characters
+        .slice(0, MAX_QUERY_LENGTH);
+}
+
+// Utility: Check rate limit
+function checkRateLimit(clientId: string): { allowed: boolean; remaining: number } {
+    const now = Date.now();
+    const record = rateLimitMap.get(clientId);
+    
+    if (!record || now > record.resetTime) {
+        rateLimitMap.set(clientId, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
+        return { allowed: true, remaining: MAX_REQUESTS_PER_WINDOW - 1 };
+    }
+    
+    if (record.count >= MAX_REQUESTS_PER_WINDOW) {
+        return { allowed: false, remaining: 0 };
+    }
+    
+    record.count++;
+    return { allowed: true, remaining: MAX_REQUESTS_PER_WINDOW - record.count };
+}
 
 // System prompt for the NVIDIA Doc Navigator
 const SYSTEM_PROMPT = `You are the NVIDIA Doc Navigator, an expert AI assistant for NVIDIA developers.
@@ -314,13 +355,41 @@ function getCodeExamples(queryType: string): CodeExample[] {
 }
 
 export async function POST(request: NextRequest) {
+    const startTime = Date.now();
+    
     try {
-        const body: QueryRequest = await request.json();
-        const { query, include_code_examples = true } = body;
+        // Rate limiting check
+        const clientId = request.headers.get('x-forwarded-for') || 
+                         request.headers.get('x-real-ip') || 
+                         'anonymous';
+        const rateLimit = checkRateLimit(clientId);
         
-        if (!query || typeof query !== 'string') {
+        if (!rateLimit.allowed) {
+            return NextResponse.json(
+                { error: 'Rate limit exceeded. Please try again later.' },
+                { 
+                    status: 429,
+                    headers: { 'Retry-After': '60' }
+                }
+            );
+        }
+        
+        const body: QueryRequest = await request.json();
+        const { query: rawQuery, include_code_examples = true } = body;
+        
+        // Input validation and sanitization
+        if (!rawQuery || typeof rawQuery !== 'string') {
             return NextResponse.json(
                 { error: 'Query is required and must be a string' },
+                { status: 400 }
+            );
+        }
+        
+        const query = sanitizeInput(rawQuery);
+        
+        if (query.length < 3) {
+            return NextResponse.json(
+                { error: 'Query must be at least 3 characters long' },
                 { status: 400 }
             );
         }
@@ -335,38 +404,103 @@ export async function POST(request: NextRequest) {
         let llmProvider = 'mock';
         let llmModel = 'none';
         let isNvidia = false;
+        let latencyMs = 0;
         
-        // Try NVIDIA NIM API
+        // Try NVIDIA NIM API with retry logic and timeout
         if (NVIDIA_API_KEY) {
-            try {
-                const client = new OpenAI({
-                    baseURL: NVIDIA_BASE_URL,
-                    apiKey: NVIDIA_API_KEY,
-                });
-                
-                const completion = await client.chat.completions.create({
-                    model: NVIDIA_MODEL,
-                    messages: [
-                        { role: 'system', content: SYSTEM_PROMPT },
-                        { role: 'user', content: `Context from NVIDIA documentation:\n${NVIDIA_DOCS_CONTEXT}\n\nUser Question: ${query}` }
-                    ],
-                    temperature: 0.6,
-                    top_p: 0.7,
-                    max_tokens: 4096,
-                });
-                
-                answer = completion.choices[0]?.message?.content || 'Unable to generate response.';
-                llmProvider = 'nvidia_nim';
-                llmModel = NVIDIA_MODEL;
-                isNvidia = true;
-                
-            } catch (error) {
-                console.error('NVIDIA NIM API error:', error);
+            let lastError: Error | null = null;
+            
+            for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+                try {
+                    const client = new OpenAI({
+                        baseURL: NVIDIA_BASE_URL,
+                        apiKey: NVIDIA_API_KEY,
+                        timeout: API_TIMEOUT_MS,
+                        maxRetries: 0, // We handle retries ourselves
+                    });
+                    
+                    // Create AbortController for timeout
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+                    
+                    try {
+                        const completion = await client.chat.completions.create({
+                            model: NVIDIA_MODEL,
+                            messages: [
+                                { role: 'system', content: SYSTEM_PROMPT },
+                                { role: 'user', content: `Context from NVIDIA documentation:\n${NVIDIA_DOCS_CONTEXT}\n\nUser Question: ${query}` }
+                            ],
+                            temperature: 0.6,
+                            top_p: 0.7,
+                            max_tokens: 4096,
+                        }, {
+                            signal: controller.signal as AbortSignal,
+                        });
+                        
+                        clearTimeout(timeoutId);
+                        answer = completion.choices[0]?.message?.content || 'Unable to generate response.';
+                        llmProvider = 'nvidia_nim';
+                        llmModel = NVIDIA_MODEL;
+                        isNvidia = true;
+                        latencyMs = Date.now() - startTime;
+                        lastError = null;
+                        break; // Success, exit retry loop
+                        
+                    } catch (innerError) {
+                        clearTimeout(timeoutId);
+                        throw innerError;
+                    }
+                    
+                } catch (error) {
+                    lastError = error as Error;
+                    const isRetryable = isRetryableError(error);
+                    
+                    // Log error without exposing API key
+                    console.error(`NVIDIA NIM API error (attempt ${attempt}/${MAX_RETRIES}):`, {
+                        message: lastError.message,
+                        name: lastError.name,
+                        retryable: isRetryable,
+                    });
+                    
+                    if (!isRetryable || attempt === MAX_RETRIES) {
+                        break;
+                    }
+                    
+                    // Exponential backoff with jitter
+                    const backoffDelay = RETRY_DELAY_MS * Math.pow(2, attempt - 1) + Math.random() * 1000;
+                    await sleep(backoffDelay);
+                }
+            }
+            
+            if (lastError) {
+                // Fallback to mock answer on API failure
                 answer = generateMockAnswer(query, routing.type, sources);
+                console.warn('Falling back to mock response after API failures');
             }
         } else {
             answer = generateMockAnswer(query, routing.type, sources);
         }
+        
+        // Ensure answer is defined
+        answer = answer || generateMockAnswer(query, routing.type, sources);
+
+// Helper function to determine if error is retryable
+function isRetryableError(error: unknown): boolean {
+    if (error instanceof Error) {
+        const message = error.message.toLowerCase();
+        // Retry on timeout, rate limit, or server errors
+        return message.includes('timeout') ||
+               message.includes('rate limit') ||
+               message.includes('429') ||
+               message.includes('500') ||
+               message.includes('502') ||
+               message.includes('503') ||
+               message.includes('504') ||
+               message.includes('network') ||
+               message.includes('econnreset');
+    }
+    return false;
+}
         
         const response: QueryResponse = {
             query,
@@ -385,12 +519,30 @@ export async function POST(request: NextRequest) {
             nvidia_technologies: isNvidia ? ['nim', 'cuda'] : ['cuda'],
         };
         
-        return NextResponse.json(response);
+        // Add performance headers
+        const headers = new Headers();
+        headers.set('X-Response-Time', `${Date.now() - startTime}ms`);
+        headers.set('X-Rate-Limit-Remaining', String(rateLimit.remaining));
+        
+        return NextResponse.json(response, { headers });
         
     } catch (error) {
-        console.error('Query API error:', error);
+        // Secure error logging - never log API keys or sensitive data
+        const safeError = error instanceof Error 
+            ? { message: error.message, name: error.name }
+            : { message: 'Unknown error' };
+        console.error('Query API error:', safeError);
+        
+        // Return appropriate error response
+        if (error instanceof SyntaxError) {
+            return NextResponse.json(
+                { error: 'Invalid JSON in request body' },
+                { status: 400 }
+            );
+        }
+        
         return NextResponse.json(
-            { error: 'Internal server error' },
+            { error: 'An error occurred processing your request. Please try again.' },
             { status: 500 }
         );
     }

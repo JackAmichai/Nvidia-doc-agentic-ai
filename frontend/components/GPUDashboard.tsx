@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Cpu, Thermometer, Zap, HardDrive, RefreshCw, Server, AlertTriangle, CheckCircle } from 'lucide-react';
 
 interface GPUMemory {
@@ -62,51 +62,96 @@ export default function GPUDashboard({ onShowTechPopup }: GPUDashboardProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
+  
+  // Use ref to track if component is mounted (prevents memory leaks)
+  const isMountedRef = useRef(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  const fetchGPUData = async () => {
+  const fetchGPUData = useCallback(async () => {
+    // Cancel any pending request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    abortControllerRef.current = new AbortController();
+    
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${API_URL}/api/v1/gpu-info`);
+      const response = await fetch(`${API_URL}/api/v1/gpu-info`, {
+        signal: abortControllerRef.current.signal,
+      });
       if (!response.ok) throw new Error('Failed to fetch GPU data');
       const data = await response.json();
-      setGpuData(data);
-      setError(null);
+      
+      // Only update state if component is still mounted
+      if (isMountedRef.current) {
+        setGpuData(data);
+        setError(null);
+      }
     } catch (err) {
-      setError('Could not connect to GPU metrics service');
-      // Set mock data for demo
-      setGpuData({
-        available: false,
-        mock_data: true,
-        gpu_count: 1,
-        gpus: [{
-          index: 0,
-          name: "NVIDIA A100-SXM4-80GB (Demo)",
-          uuid: "GPU-demo-0000",
-          memory: { total_gb: 80, used_gb: 12.5, free_gb: 67.5, utilization_percent: 15.6 },
-          utilization: { gpu_percent: 23, memory_percent: 16 },
-          temperature_c: 42,
-          power: { draw_watts: 125, limit_watts: 400 },
-          mig: { enabled: true, mode: "enabled", max_instances: 7, instances: [
-            { index: 0, name: "MIG 1g.10gb" },
-            { index: 1, name: "MIG 1g.10gb" },
-            { index: 2, name: "MIG 3g.40gb" }
-          ]}
-        }],
-        timestamp: new Date().toISOString()
-      });
+      // Ignore abort errors
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
+      
+      if (isMountedRef.current) {
+        setError('Could not connect to GPU metrics service');
+        // Set mock data for demo
+        setGpuData({
+          available: false,
+          mock_data: true,
+          gpu_count: 1,
+          gpus: [{
+            index: 0,
+            name: "NVIDIA A100-SXM4-80GB (Demo)",
+            uuid: "GPU-demo-0000",
+            memory: { total_gb: 80, used_gb: 12.5, free_gb: 67.5, utilization_percent: 15.6 },
+            utilization: { gpu_percent: 23, memory_percent: 16 },
+            temperature_c: 42,
+            power: { draw_watts: 125, limit_watts: 400 },
+            mig: { enabled: true, mode: "enabled", max_instances: 7, instances: [
+              { index: 0, name: "MIG 1g.10gb" },
+              { index: 1, name: "MIG 1g.10gb" },
+              { index: 2, name: "MIG 3g.40gb" }
+            ]}
+          }],
+          timestamp: new Date().toISOString()
+        });
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
-  };
+  }, []);
 
+  // Initial fetch and cleanup
   useEffect(() => {
+    isMountedRef.current = true;
     fetchGPUData();
     
+    return () => {
+      isMountedRef.current = false;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [fetchGPUData]);
+  
+  // Auto-refresh effect (separate to avoid dependency issues)
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
+    
     if (autoRefresh) {
-      const interval = setInterval(fetchGPUData, 5000);
-      return () => clearInterval(interval);
+      intervalId = setInterval(fetchGPUData, 5000);
     }
-  }, [autoRefresh]);
+    
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [autoRefresh, fetchGPUData]);
 
   const getTemperatureColor = (temp: number) => {
     if (temp < 50) return 'text-green-400';
