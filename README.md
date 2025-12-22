@@ -1,252 +1,244 @@
-# NVIDIA Doc Navigator
+# NVIDIA Doc Navigator 🚀
 
-A Unified AI Assistant for Navigating Fragmented NVIDIA Documentation, Examples & Troubleshooting Guides
+[![NVIDIA Technologies](https://img.shields.io/badge/NVIDIA-NIM%20%7C%20NeMo%20%7C%20CUDA-76B900?style=for-the-badge&logo=nvidia)](https://developer.nvidia.com)
+[![Next.js](https://img.shields.io/badge/Next.js-14-black?style=for-the-badge&logo=next.js)](https://nextjs.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.104-009688?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com)
 
----
+A Unified AI Assistant for Navigating Fragmented NVIDIA Documentation, powered by **NVIDIA NIM**, **NeMo Guardrails**, and cutting-edge RAG technology.
 
-## Overview
-
-**NVIDIA Doc Navigator** is an AI-powered agent that provides unified, accurate, and version-specific answers to NVIDIA developers' questions—using only public, approved sources such as docs.nvidia.com, official GitHub repos, and NVIDIA support forums. This tool quickly guides users to solutions, code samples, and troubleshooting steps for CUDA, TensorRT, NeMo, Triton, NVLink/MIG, and more.
-
----
-
-## Problem Statement
-
-NVIDIA documentation is often fragmented, scattered across different sources, and difficult to search:
-- **Multiple documentation portals:** Official docs, GitHub, forums, blogs, and more.
-- **Inconsistent guidance:** Broken links, outdated or contradictory information.
-- **Poor searchability:** Built-in and generic search tools often fail to give relevant, up-to-date results.
-
-**Result:** Slow onboarding, wasted engineering hours, version mismatch errors, and high activation energy before productivity.
+![NVIDIA Doc Navigator Demo](https://via.placeholder.com/800x400/1a1a2e/76B900?text=NVIDIA+Doc+Navigator)
 
 ---
 
-## Product Vision
+## 🌟 NVIDIA Technologies Showcase
 
-The one-stop AI agent for all NVIDIA developer documentation:
-- Ingests only public NVIDIA documentation and examples
-- Uses Retrieval-Augmented Generation (RAG) plus routing for fast, accurate, version-aware answers
-- Unifies examples from GitHub & docs
-- Provides step-by-step debugging and configuration guides
-- Always cites sources and returns non-IP-sensitive, public data only
+This project demonstrates proficiency with the following NVIDIA technologies:
 
----
-
-## Target Users
-
-- CUDA developers and ML engineers
-- DevOps managing multi-GPU infra
-- Students/engineers onboarding NVIDIA tech
-- Edge and cloud practitioners (Jetson, AWS/GCP with NVIDIA GPUs)
+| Technology | Description | Implementation |
+|------------|-------------|----------------|
+| 🧠 **NVIDIA NIM** | State-of-the-art LLM inference | Primary LLM provider via `langchain-nvidia-ai-endpoints` |
+| 🛡️ **NeMo Guardrails** | AI safety rails | Input/output validation, topic control |
+| 📊 **NVML/pynvml** | GPU monitoring | Real-time metrics dashboard |
+| ⚡ **CUDA** | Parallel computing | Backend processing |
+| 🎯 **TensorRT** | Inference optimization | Model acceleration (planned) |
+| 🖥️ **Triton** | Model serving | Embedding deployment (planned) |
 
 ---
 
-## Value Proposition
+## 🚀 Quick Start
 
-| Pain Point               | Value Delivered                       |
-|--------------------------|---------------------------------------|
-| Docs are fragmented      | Unified search across public sources  |
-| Version confusion        | Version-aware, compatibility answers  |
-| Sparse examples          | Auto-retrieved example code           |
-| MIG/NVLink complexity    | Step-by-step config guides            |
-| Debugging difficulties   | Built-in troubleshooting/flows        |
-| Slow ramp-up             | Quick-start flows by experience/tracks|
+### Prerequisites
 
----
+- Python 3.10+
+- Node.js 18+
+- NVIDIA GPU (optional, for real GPU metrics)
+- NVIDIA API Key (get from [build.nvidia.com](https://build.nvidia.com))
 
-## Core Features (MVP)
+### 1. Clone the Repository
 
-### F1 — Unified RAG Search  
-Unified retrieval over:
-- [NVIDIA Docs](https://docs.nvidia.com)
-- [CUDA Toolkit Docs](https://docs.nvidia.com/cuda)
-- [Triton Server](https://github.com/triton-inference-server/server)
-- [NeMo](https://github.com/NVIDIA/NeMo)
-- [TensorRT Docs](https://docs.nvidia.com/deeplearning/tensorrt)
-- [NVML API](https://docs.nvidia.com/deploy/nvml-api/index.html)
-- [NVIDIA Dev Forums](https://forums.developer.nvidia.com)
-- Official NVIDIA GitHub repositories
-
-**Vector Schema Example**:
-```json
-{
-  "id": "cuda-docs-12-4-kernels",
-  "source": "docs.nvidia.com/cuda",
-  "title": "CUDA Kernels - Device Execution",
-  "content": "<<< text chunk >>>",
-  "version": "12.4",
-  "tags": ["cuda", "kernel", "execution", "programming"],
-  "url": "https://docs.nvidia.com/cuda/cuda-c-programming-guide"
-}
+```bash
+git clone https://github.com/JackAmichai/Nvidia-doc-agentic-ai.git
+cd Nvidia-doc-agentic-ai
 ```
 
-### F2 — Developer Query Router  
-Routes user queries to correct module (CUDA, MIG, NVLink, TensorRT, NeMo, Triton, generic CUDA).
+### 2. Backend Setup
 
-### F3 — Code Example Generator  
-Fetches examples from public GitHub via API queries (e.g., `https://api.github.com/search/code?q=cuda+gridDim+repo:NVIDIA/cuda-samples`), formats and injects relevant code.
+```bash
+cd backend
 
-### F4 — Version Compatibility Reasoner  
-Provides version compatibility checks, warnings, and links to official tables for combinations like "TensorRT 10.0 with CUDA 12.1".
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-### F5 — Step-by-Step Debugger  
-Guided troubleshooting flows for common issues (profiling crashes, MIG/K8s setup, etc.), with references to forums and docs.
+# Install dependencies
+pip install -r requirements.txt
 
----
+# Configure environment
+cp .env.example .env
+# Edit .env and add your NVIDIA_API_KEY
 
-## Non-Goals
+# Run the server
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
 
-- No use of internal/private NVIDIA data or tools  
-- No predictions about unreleased products  
-- No private benchmarks
+### 3. Frontend Setup
 
----
+```bash
+cd frontend
 
-## Example User Flows
+# Install dependencies
+npm install
 
-1. **User Query:** "Why is my MIG instance not visible in Kubernetes on A100?"
-2. **Router:** Sends to MIG/Kubernetes onboarding flow
-3. **RAG Retrieval:** Fetches relevant sections from NVIDIA docs, GitHub, forums
-4. **Version Reasoner:** Ensures instructions are correct for user-specified versions
-5. **Example Builder:** Provides code/command examples
-6. **Composed Answer:** Returns step-by-step validated solution, troubleshooting, and sources
+# Run development server
+npm run dev
+```
 
----
+### 4. Open the App
 
-## Prompts (For Agent Use)
-
-### System Prompt
->You are the NVIDIA Doc Navigator.  
->You answer ONLY using public NVIDIA information.  
->When unsure, say "I cannot verify this from public data."  
->Always cite the specific docs or GitHub repo URLs.  
->Return step-by-step guidance, code examples, and version requirements.  
->Never hallucinate unreleased hardware, internal systems, or private APIs.
-
-### Retrieval Prompt
->Given this query:  
->{{user_query}}  
->Search these categories: CUDA Toolkit, TensorRT, NeMo, Triton, NVML/NVLink/MIG, Developer Forums, Official GitHub repositories.  
->Return the top 5 most relevant chunks (200–500 tokens each).
-
-### Answer Composition Prompt
->Using the retrieved chunks, build:  
->1. Direct answer (max 5 sentences)  
->2. Step-by-step instructions  
->3. Working code example (if applicable)  
->4. Version compatibility notes  
->5. Troubleshooting checklist  
->6. Sources with URLs  
->If any detail is not present in the docs, write: "Not available in public NVIDIA documentation."
+Navigate to [http://localhost:3000](http://localhost:3000)
 
 ---
 
-## Stage-by-Stage Implementation Plan
+## 🔑 API Keys Configuration
 
-### Stage 1 — Data Collection (RAG)
-- Crawl allowed public URLs, chunk docs into 500–2,000 token windows, store in vector DB (Pinecone/Weaviate/Mongo Atlas).
+### NVIDIA NIM (Primary - Recommended)
 
-### Stage 2 — Agent Creation
-- Implement modular flows for: `mig_config`, `nvlink_debugger`, `tensorRT_examples`, `cuda_troubleshooting`, `nemo_workflows`.
+1. Go to [build.nvidia.com](https://build.nvidia.com)
+2. Sign up or log in
+3. Select any model and click "Get API Key"
+4. Add to `backend/.env`:
 
-### Stage 3 — Router Logic
-- Create a keyword or LLM-based intent router.
+```env
+NVIDIA_API_KEY=nvapi-your-key-here
+NVIDIA_NIM_MODEL=meta/llama-3.1-70b-instruct
+```
 
-### Stage 4 — Integration
-- Deploy with Base44, AWS Bedrock, or custom FastAPI backend + Next.js UI.
+### Fallback Options
 
-### Stage 5 — Evaluation
-- Use established LLM agent evaluation metrics (accuracy, coverage, user satisfaction).
+```env
+# Hugging Face (Free)
+HUGGINGFACE_API_KEY=hf_your_token
 
----
-
-## Example Output
-
->**User:** Why is my MIG instance not visible in Kubernetes on A100?  
->
->**Agent:**  
->Your MIG instance is not being recognized because the Kubernetes device plugin requires both the host driver and the container runtime to expose MIG devices.
->
->Step-by-step:
->1. Enable MIG mode: `sudo nvidia-smi -i 0 -mig 1`
->2. Create MIG instances: `sudo nvidia-smi mig -cgi 19,19 -C`
->3. Verify: `nvidia-smi -L`
->4. Ensure device plugin flags: `--mig-strategy=single`, `--device-list-strategy=envvar`
->5. Restart kubelet.
->
->Sources:  
->https://docs.nvidia.com/datacenter/cloud-native/kubernetes/device-plugin  
->https://docs.nvidia.com/datacenter/tesla/mig-user-guide
-
----
-
-## Roadmap (3 Months)
-
-| Month | Deliverables                                        |
-|-------|-----------------------------------------------------|
-| 1     | RAG dataset, embeddings, router                     |
-| 2     | Debugging modules, example generator                |
-| 3     | Version engine, compatibility matrix, user interface|
-
----
-
-## Example Back-End (Python, FastAPI)
-
-```python
-from fastapi import FastAPI
-from langchain.vectorstores import Pinecone
-from openai import OpenAI
-
-app = FastAPI()
-
-@app.post("/query")
-def query(q: str):
-    docs = vectorstore.similarity_search(q, k=5)
-    answer = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": build_retrieval_prompt(q, docs)},
-        ],
-        temperature=0.2
-    )
-    return answer.choices[0].message["content"]
+# OpenAI (Paid)
+OPENAI_API_KEY=sk-your-key
 ```
 
 ---
 
-## Next Steps
+## 🏗️ Architecture
 
-To generate full scaffolding, agents, prompts, and database schemas, run:
-
-`“Generate the build kit for NVIDIA Doc Navigator.”`
-
-
-
-## Project Structure
-- `backend/`: FastAPI backend
-- `frontend/`: Next.js frontend
-
-## Setup
-
-### Backend
-1. Navigate to `backend/`
-2. Create virtual environment: `python3 -m venv venv`
-3. Activate: `source venv/bin/activate`
-4. Install dependencies: `pip install -r requirements.txt`
-5. Run: `uvicorn app.main:app --reload`
-
-### Frontend
-1. Navigate to `frontend/`
-2. Install dependencies: `npm install`
-3. Run: `npm run dev`
-
-## Environment Variables
-Create `.env` in `backend/` with:
-
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Frontend (Next.js)                        │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
+│  │   Chat UI   │  │ GPU Monitor │  │ Tech Popups │         │
+│  └─────────────┘  └─────────────┘  └─────────────┘         │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Backend (FastAPI)                         │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
+│  │  RAG Agent  │  │  Guardrails │  │ GPU Metrics │         │
+│  └─────────────┘  └─────────────┘  └─────────────┘         │
+│         │                │                │                  │
+│         ▼                ▼                ▼                  │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
+│  │ NVIDIA NIM  │  │NeMo Guards  │  │   pynvml    │         │
+│  └─────────────┘  └─────────────┘  └─────────────┘         │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Vector Store (ChromaDB)                   │
+│              NVIDIA Documentation & Examples                 │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-© 2025 Jack Amichai — Production Specification for NVIDIA Doc Navigator
-OPENAI_API_KEY=your_key
+## 📡 API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/query` | POST | Query the AI assistant |
+| `/api/v1/gpu-info` | GET | Real-time GPU metrics |
+| `/api/v1/gpu-summary` | GET | GPU status summary |
+| `/api/v1/nvidia-tech-stack` | GET | Active NVIDIA technologies |
+| `/api/v1/guardrails-status` | GET | NeMo Guardrails status |
+| `/api/v1/llm-info` | GET | Current LLM provider info |
+| `/api/v1/health` | GET | Health check |
+| `/api/v1/stats` | GET | Vector store statistics |
+
+---
+
+## 🚀 Deployment
+
+### Frontend (Vercel)
+
+1. Push to GitHub
+2. Import project in [Vercel](https://vercel.com)
+3. Set environment variable:
+   - `NEXT_PUBLIC_API_URL`: Your backend URL
+
+### Backend (Railway/Render/Cloud Run)
+
+1. Deploy backend to your preferred platform
+2. Set environment variables from `.env.example`
+3. Update frontend `NEXT_PUBLIC_API_URL`
+
+---
+
+## 🎯 Features
+
+### ✅ Implemented
+
+- [x] **NVIDIA NIM Integration** - Primary LLM via NVIDIA's inference service
+- [x] **NeMo Guardrails** - AI safety with topic control & hallucination prevention
+- [x] **GPU Metrics Dashboard** - Real-time monitoring via NVML
+- [x] **RAG Pipeline** - Document retrieval with ChromaDB
+- [x] **Query Router** - Intelligent routing to specialized handlers
+- [x] **Tech Popup System** - Educational popups about NVIDIA technologies
+- [x] **Caching System** - Response caching for performance
+
+### 🔮 Planned
+
+- [ ] Triton Inference Server for embeddings
+- [ ] NVIDIA Riva for voice interface
+- [ ] Milvus with GPU acceleration
+- [ ] LangGraph multi-agent architecture
+- [ ] Interactive CUDA playground
+
+---
+
+## 📂 Project Structure
+
 ```
+nvidia-doc-agentic-ai/
+├── backend/
+│   ├── app/
+│   │   ├── api/           # API routes and models
+│   │   ├── core/          # Config and logging
+│   │   └── services/      # Business logic
+│   │       ├── rag_agent.py
+│   │       ├── guardrails.py
+│   │       ├── gpu_metrics.py
+│   │       └── ...
+│   ├── guardrails/        # NeMo Guardrails config
+│   ├── requirements.txt
+│   └── .env.example
+├── frontend/
+│   ├── app/               # Next.js pages
+│   ├── components/        # React components
+│   │   ├── ChatInterface.tsx
+│   │   ├── GPUDashboard.tsx
+│   │   └── NvidiaTechPopup.tsx
+│   └── package.json
+├── docker-compose.yml
+└── README.md
+```
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+---
+
+## 📄 License
+
+This project is for demonstration purposes. See individual NVIDIA SDKs for their respective licenses.
+
+---
+
+## 🙏 Acknowledgments
+
+- [NVIDIA NIM](https://developer.nvidia.com/nim)
+- [NeMo Guardrails](https://github.com/NVIDIA/NeMo-Guardrails)
+- [LangChain](https://langchain.com)
+- [ChromaDB](https://trychroma.com)
+
+---
+
+**Built with ❤️ to showcase NVIDIA technology expertise**
