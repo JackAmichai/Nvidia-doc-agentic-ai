@@ -3,13 +3,13 @@
 import React, { useState, useEffect } from 'react';
 import { X, ChevronDown, ChevronUp, ExternalLink, Sparkles, Shield, Cpu, Server, Zap, Brain, Database, Mic } from 'lucide-react';
 
-export type NvidiaTechType = 
-  | 'nim' 
-  | 'nemo-guardrails' 
-  | 'triton' 
-  | 'tensorrt' 
-  | 'riva' 
-  | 'rapids' 
+export type NvidiaTechType =
+  | 'nim'
+  | 'nemo-guardrails'
+  | 'triton'
+  | 'tensorrt'
+  | 'riva'
+  | 'rapids'
   | 'milvus'
   | 'pynvml'
   | 'cuda';
@@ -183,21 +183,23 @@ export default function NvidiaTechPopup({
 
   const tech = TECH_INFO[techType];
 
+  // Reset state when showing
   useEffect(() => {
     if (isVisible) {
       setIsAnimating(true);
       setIsExpanded(false);
-      
-      if (autoHide > 0) {
-        const timer = setTimeout(() => {
-          if (!isExpanded) {
-            onClose();
-          }
-        }, autoHide);
-        return () => clearTimeout(timer);
-      }
     }
-  }, [isVisible, autoHide, onClose, isExpanded]);
+  }, [isVisible]);
+
+  // Handle auto-hide
+  useEffect(() => {
+    if (isVisible && autoHide > 0 && !isExpanded) {
+      const timer = setTimeout(() => {
+        onClose();
+      }, autoHide);
+      return () => clearTimeout(timer);
+    }
+  }, [isVisible, autoHide, isExpanded, onClose]);
 
   useEffect(() => {
     if (!isVisible) {
@@ -217,10 +219,9 @@ export default function NvidiaTechPopup({
   };
 
   return (
-    <div 
-      className={`fixed ${positionClasses[position]} z-[100] transition-all duration-300 ${
-        isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
-      }`}
+    <div
+      className={`fixed ${positionClasses[position]} z-[100] transition-all duration-300 ${isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
+        }`}
     >
       <div className={`
         relative overflow-hidden rounded-2xl shadow-2xl
@@ -231,7 +232,7 @@ export default function NvidiaTechPopup({
       `}>
         {/* Gradient accent bar */}
         <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${tech.color}`} />
-        
+
         {/* Header */}
         <div className="p-4">
           <div className="flex items-start justify-between gap-3">
@@ -258,7 +259,7 @@ export default function NvidiaTechPopup({
               <X className="w-4 h-4" />
             </button>
           </div>
-          
+
           {/* Learn More Button */}
           <div
             role="button"
@@ -292,7 +293,7 @@ export default function NvidiaTechPopup({
             )}
           </div>
         </div>
-        
+
         {/* Expanded Content */}
         <div className={`
           overflow-hidden transition-all duration-300
@@ -301,12 +302,12 @@ export default function NvidiaTechPopup({
           <div className="px-4 pb-4 space-y-4">
             {/* Divider */}
             <div className="border-t border-white/10" />
-            
+
             {/* Full Description */}
             <p className="text-sm text-gray-300 leading-relaxed">
               {tech.fullDescription}
             </p>
-            
+
             {/* Features */}
             <div className="space-y-2">
               <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
@@ -321,7 +322,7 @@ export default function NvidiaTechPopup({
                 ))}
               </ul>
             </div>
-            
+
             {/* External Link */}
             <a
               href={tech.learnMoreUrl}
