@@ -33,16 +33,16 @@ function sanitizeInput(input: string): string {
 function checkRateLimit(clientId: string): { allowed: boolean; remaining: number } {
     const now = Date.now();
     const record = rateLimitMap.get(clientId);
-    
+
     if (!record || now > record.resetTime) {
         rateLimitMap.set(clientId, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
         return { allowed: true, remaining: MAX_REQUESTS_PER_WINDOW - 1 };
     }
-    
+
     if (record.count >= MAX_REQUESTS_PER_WINDOW) {
         return { allowed: false, remaining: 0 };
     }
-    
+
     record.count++;
     return { allowed: true, remaining: MAX_REQUESTS_PER_WINDOW - record.count };
 }
@@ -136,7 +136,7 @@ interface CodeExample {
 // Route the query to determine type
 function routeQuery(query: string): { type: string; confidence: number; keywords: string[]; tags: string[] } {
     const lowerQuery = query.toLowerCase();
-    
+
     const routingRules = [
         { type: 'mig_config', keywords: ['mig', 'multi-instance', 'partition', 'gpu instance'], tags: ['MIG', 'A100', 'Configuration'] },
         { type: 'cuda_general', keywords: ['cuda', 'kernel', 'thread', 'block', 'shared memory', 'global memory'], tags: ['CUDA', 'Programming'] },
@@ -146,7 +146,7 @@ function routeQuery(query: string): { type: string; confidence: number; keywords
         { type: 'nemo', keywords: ['nemo', 'megatron', 'llm', 'transformer'], tags: ['NeMo', 'LLM'] },
         { type: 'triton', keywords: ['triton', 'inference server', 'model serving'], tags: ['Triton', 'Serving'] },
     ];
-    
+
     for (const rule of routingRules) {
         const matchedKeywords = rule.keywords.filter(kw => lowerQuery.includes(kw));
         if (matchedKeywords.length > 0) {
@@ -158,7 +158,7 @@ function routeQuery(query: string): { type: string; confidence: number; keywords
             };
         }
     }
-    
+
     return { type: 'generic', confidence: 0.5, keywords: [], tags: ['General'] };
 }
 
@@ -198,7 +198,7 @@ function getSources(queryType: string): Source[] {
             { title: 'NVIDIA NGC Catalog', url: 'https://catalog.ngc.nvidia.com/', relevance: 0.65 },
         ],
     };
-    
+
     return sourceMap[queryType] || sourceMap.generic;
 }
 
@@ -213,9 +213,9 @@ function generateMockAnswer(query: string, queryType: string, sources: Source[])
         triton: "From Triton Inference Server docs:\n\n",
         generic: "Based on NVIDIA documentation:\n\n",
     };
-    
+
     let answer = typeIntros[queryType] || typeIntros.generic;
-    
+
     if (queryType === 'mig_config') {
         answer += `**MIG Configuration Steps:**
 
@@ -302,12 +302,12 @@ function generateMockAnswer(query: string, queryType: string, sources: Source[])
         answer += `I found relevant information for your query about "${query}".\n\n`;
         answer += `Please refer to the official documentation for detailed guidance.\n\n`;
     }
-    
+
     answer += `\n\n**📚 Sources:**\n`;
     sources.forEach((s, i) => {
         answer += `${i + 1}. [${s.title}](${s.url})\n`;
     });
-    
+
     return answer;
 }
 
@@ -350,33 +350,51 @@ function getCodeExamples(queryType: string): CodeExample[] {
             }
         ],
     };
-    
+
     return examples[queryType] || [];
+}
+
+// Helper function to determine if error is retryable
+function isRetryableError(error: unknown): boolean {
+    if (error instanceof Error) {
+        const message = error.message.toLowerCase();
+        // Retry on timeout, rate limit, or server errors
+        return message.includes('timeout') ||
+            message.includes('rate limit') ||
+            message.includes('429') ||
+            message.includes('500') ||
+            message.includes('502') ||
+            message.includes('503') ||
+            message.includes('504') ||
+            message.includes('network') ||
+            message.includes('econnreset');
+    }
+    return false;
 }
 
 export async function POST(request: NextRequest) {
     const startTime = Date.now();
-    
+
     try {
         // Rate limiting check
-        const clientId = request.headers.get('x-forwarded-for') || 
-                         request.headers.get('x-real-ip') || 
-                         'anonymous';
+        const clientId = request.headers.get('x-forwarded-for') ||
+            request.headers.get('x-real-ip') ||
+            'anonymous';
         const rateLimit = checkRateLimit(clientId);
-        
+
         if (!rateLimit.allowed) {
             return NextResponse.json(
                 { error: 'Rate limit exceeded. Please try again later.' },
-                { 
+                {
                     status: 429,
                     headers: { 'Retry-After': '60' }
                 }
             );
         }
-        
+
         const body: QueryRequest = await request.json();
         const { query: rawQuery, include_code_examples = true } = body;
-        
+
         // Input validation and sanitization
         if (!rawQuery || typeof rawQuery !== 'string') {
             return NextResponse.json(
@@ -384,32 +402,32 @@ export async function POST(request: NextRequest) {
                 { status: 400 }
             );
         }
-        
+
         const query = sanitizeInput(rawQuery);
-        
+
         if (query.length < 3) {
             return NextResponse.json(
                 { error: 'Query must be at least 3 characters long' },
                 { status: 400 }
             );
         }
-        
+
         // Route the query
         const routing = routeQuery(query);
-        
+
         // Get relevant sources
         const sources = getSources(routing.type);
-        
+
         let answer: string = '';
         let llmProvider = 'mock';
         let llmModel = 'none';
         let isNvidia = false;
         let latencyMs = 0;
-        
+
         // Try NVIDIA NIM API with retry logic and timeout
         if (NVIDIA_API_KEY) {
             let lastError: Error | null = null;
-            
+
             for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
                 try {
                     const client = new OpenAI({
@@ -418,11 +436,11 @@ export async function POST(request: NextRequest) {
                         timeout: API_TIMEOUT_MS,
                         maxRetries: 0, // We handle retries ourselves
                     });
-                    
+
                     // Create AbortController for timeout
                     const controller = new AbortController();
                     const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
-                    
+
                     try {
                         const completion = await client.chat.completions.create({
                             model: NVIDIA_MODEL,
@@ -436,7 +454,7 @@ export async function POST(request: NextRequest) {
                         }, {
                             signal: controller.signal as AbortSignal,
                         });
-                        
+
                         clearTimeout(timeoutId);
                         answer = completion.choices[0]?.message?.content || 'Unable to generate response.';
                         llmProvider = 'nvidia_nim';
@@ -445,33 +463,33 @@ export async function POST(request: NextRequest) {
                         latencyMs = Date.now() - startTime;
                         lastError = null;
                         break; // Success, exit retry loop
-                        
+
                     } catch (innerError) {
                         clearTimeout(timeoutId);
                         throw innerError;
                     }
-                    
+
                 } catch (error) {
                     lastError = error as Error;
                     const isRetryable = isRetryableError(error);
-                    
+
                     // Log error without exposing API key
                     console.error(`NVIDIA NIM API error (attempt ${attempt}/${MAX_RETRIES}):`, {
                         message: lastError.message,
                         name: lastError.name,
                         retryable: isRetryable,
                     });
-                    
+
                     if (!isRetryable || attempt === MAX_RETRIES) {
                         break;
                     }
-                    
+
                     // Exponential backoff with jitter
                     const backoffDelay = RETRY_DELAY_MS * Math.pow(2, attempt - 1) + Math.random() * 1000;
                     await sleep(backoffDelay);
                 }
             }
-            
+
             if (lastError) {
                 // Fallback to mock answer on API failure
                 answer = generateMockAnswer(query, routing.type, sources);
@@ -480,28 +498,10 @@ export async function POST(request: NextRequest) {
         } else {
             answer = generateMockAnswer(query, routing.type, sources);
         }
-        
+
         // Ensure answer is defined
         answer = answer || generateMockAnswer(query, routing.type, sources);
 
-// Helper function to determine if error is retryable
-function isRetryableError(error: unknown): boolean {
-    if (error instanceof Error) {
-        const message = error.message.toLowerCase();
-        // Retry on timeout, rate limit, or server errors
-        return message.includes('timeout') ||
-               message.includes('rate limit') ||
-               message.includes('429') ||
-               message.includes('500') ||
-               message.includes('502') ||
-               message.includes('503') ||
-               message.includes('504') ||
-               message.includes('network') ||
-               message.includes('econnreset');
-    }
-    return false;
-}
-        
         const response: QueryResponse = {
             query,
             answer,
@@ -518,21 +518,21 @@ function isRetryableError(error: unknown): boolean {
             },
             nvidia_technologies: isNvidia ? ['nim', 'cuda'] : ['cuda'],
         };
-        
+
         // Add performance headers
         const headers = new Headers();
         headers.set('X-Response-Time', `${Date.now() - startTime}ms`);
         headers.set('X-Rate-Limit-Remaining', String(rateLimit.remaining));
-        
+
         return NextResponse.json(response, { headers });
-        
+
     } catch (error) {
         // Secure error logging - never log API keys or sensitive data
-        const safeError = error instanceof Error 
+        const safeError = error instanceof Error
             ? { message: error.message, name: error.name }
             : { message: 'Unknown error' };
         console.error('Query API error:', safeError);
-        
+
         // Return appropriate error response
         if (error instanceof SyntaxError) {
             return NextResponse.json(
@@ -540,7 +540,7 @@ function isRetryableError(error: unknown): boolean {
                 { status: 400 }
             );
         }
-        
+
         return NextResponse.json(
             { error: 'An error occurred processing your request. Please try again.' },
             { status: 500 }

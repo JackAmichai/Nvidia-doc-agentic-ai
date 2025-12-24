@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Sparkles, Zap, Code, Server, Cpu, ExternalLink, AlertCircle, Loader2, Shield, Brain, Mic, Database, XCircle } from 'lucide-react';
 import NvidiaTechPopup, { useNvidiaTechPopup, NvidiaTechType } from './NvidiaTechPopup';
@@ -42,10 +44,10 @@ export default function NvidiaDocNavigator() {
     const [input, setInput] = useState('');
     const [isTyping, setIsTyping] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    
+
     // AbortController ref for request cancellation
     const abortControllerRef = useRef<AbortController | null>(null);
-    
+
     // NVIDIA Tech Popup state
     const { activePopup, showPopup, hidePopup } = useNvidiaTechPopup();
     const [shownTechs, setShownTechs] = useState<Set<NvidiaTechType>>(new Set());
@@ -57,7 +59,7 @@ export default function NvidiaDocNavigator() {
     useEffect(() => {
         scrollToBottom();
     }, [messages, isTyping, scrollToBottom]);
-    
+
     // Cleanup: Cancel any pending requests on unmount
     useEffect(() => {
         return () => {
@@ -66,7 +68,7 @@ export default function NvidiaDocNavigator() {
             }
         };
     }, []);
-    
+
     // Cancel current request handler
     const cancelRequest = useCallback(() => {
         if (abortControllerRef.current) {
@@ -111,7 +113,7 @@ export default function NvidiaDocNavigator() {
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
         }
-        
+
         // Create new AbortController for this request
         abortControllerRef.current = new AbortController();
         const { signal } = abortControllerRef.current;
@@ -146,7 +148,7 @@ export default function NvidiaDocNavigator() {
                 }),
                 signal,
             });
-            
+
             clearTimeout(timeoutId);
 
             if (!response.ok) {
@@ -188,18 +190,18 @@ export default function NvidiaDocNavigator() {
 
         } catch (error) {
             clearTimeout(timeoutId);
-            
+
             // Don't show error if request was intentionally cancelled
             if (error instanceof Error && error.name === 'AbortError') {
                 console.log('Request cancelled by user');
                 return;
             }
-            
+
             console.error("Failed to fetch answer:", error);
             const errorMessage: Message = {
                 role: 'assistant',
-                content: error instanceof Error 
-                    ? error.message 
+                content: error instanceof Error
+                    ? error.message
                     : "I'm sorry, I encountered an error while connecting to the NVIDIA documentation server. Please ensure the backend is running.",
                 error: true
             };
@@ -237,7 +239,7 @@ export default function NvidiaDocNavigator() {
                         {/* Active NVIDIA Tech indicators */}
                         <div className="hidden md:flex items-center gap-2">
                             {shownTechs.has('nemo-guardrails') && (
-                                <button 
+                                <button
                                     onClick={() => showPopup('nemo-guardrails')}
                                     className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full text-xs text-blue-400 hover:bg-blue-500/20 transition-colors"
                                 >
@@ -246,7 +248,7 @@ export default function NvidiaDocNavigator() {
                                 </button>
                             )}
                             {shownTechs.has('nim') && (
-                                <button 
+                                <button
                                     onClick={() => showPopup('nim')}
                                     className="flex items-center gap-1.5 px-2.5 py-1 bg-green-500/10 border border-green-500/20 rounded-full text-xs text-green-400 hover:bg-green-500/20 transition-colors"
                                 >
@@ -467,25 +469,25 @@ export default function NvidiaDocNavigator() {
                     {/* Powered by section with clickable NVIDIA tech badges */}
                     <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
                         <span className="text-xs text-gray-500">Powered by</span>
-                        <button 
+                        <button
                             onClick={() => showPopup('nim')}
                             className="px-2 py-1 text-xs bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 rounded-full text-green-400 transition-colors cursor-pointer"
                         >
                             NVIDIA NIM
                         </button>
-                        <button 
+                        <button
                             onClick={() => showPopup('nemo-guardrails')}
                             className="px-2 py-1 text-xs bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-full text-blue-400 transition-colors cursor-pointer"
                         >
                             NeMo Guardrails
                         </button>
-                        <button 
+                        <button
                             onClick={() => showPopup('triton')}
                             className="px-2 py-1 text-xs bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-full text-purple-400 transition-colors cursor-pointer"
                         >
                             Triton
                         </button>
-                        <button 
+                        <button
                             onClick={() => showPopup('tensorrt')}
                             className="px-2 py-1 text-xs bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/20 rounded-full text-orange-400 transition-colors cursor-pointer"
                         >
