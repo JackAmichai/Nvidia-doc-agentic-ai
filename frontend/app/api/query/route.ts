@@ -400,7 +400,7 @@ export async function POST(request: NextRequest) {
         // Get relevant sources
         const sources = getSources(routing.type);
         
-        let answer: string;
+        let answer: string = '';
         let llmProvider = 'mock';
         let llmModel = 'none';
         let isNvidia = false;
