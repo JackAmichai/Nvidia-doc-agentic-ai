@@ -191,4 +191,4 @@ MIT License - See individual NVIDIA SDKs for their respective licenses.
 
 ---
 
-**Built with ❤️ to showcase NVIDIA technology expertise**
+**Built for NVIDIA products development**
